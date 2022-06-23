@@ -59,7 +59,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     private SerializationWriterFactory $serializationWriterFactory;
 
-    private string $baseUrl;
+    private string $baseUrl = '';
 
     /**
      * @param AuthenticationProvider $authenticationProvider
