@@ -140,6 +140,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                     return null;
                 }
                 if (!$responseHandler) {
+                    if ($primitiveType === StreamInterface::class) {
+                        return $result->getBody();
+                    }
                     $rootParseNode = $this->getRootParseNode($result);
                     switch ($primitiveType) {
                         case 'int':
@@ -159,8 +162,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                             return $rootParseNode->getDateValue();
                         case Time::class:
                             return $rootParseNode->getTimeValue();
-                        case StreamInterface::class:
-                            return $result->getBody();
                         default:
                             throw new \InvalidArgumentException("Unsupported primitive type $primitiveType");
                     }
