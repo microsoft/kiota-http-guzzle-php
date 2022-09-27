@@ -110,6 +110,14 @@ class GuzzleRequestAdapter implements RequestAdapter
     /**
      * @inheritDoc
      */
+    public function getParseNodeFactory(): ParseNodeFactory
+    {
+        return $this->parseNodeFactory;
+    }
+
+    /**
+     * @inheritDoc
+     */
     public function sendCollectionAsync(RequestInformation $requestInfo, array $targetCallable, ?ResponseHandler $responseHandler = null, ?array $errorMappings = null): Promise
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
