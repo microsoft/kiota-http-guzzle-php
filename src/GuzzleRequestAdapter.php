@@ -306,7 +306,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($errorMappings === null || (!isset($errorMappings[$statusCodeAsString]) &&
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
-            throw new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
+            throw new ApiException("the server returned an unexpected status code {$statusCode} and no error class is registered for this code.");
         }
         /** @var array{string,string}|null $errorClass */
         $errorClass = $errorMappings[$statusCodeAsString] ?? ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
@@ -329,5 +329,19 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     private function is204NoContentResponse(ResponseInterface $response): bool{
         return $response->getStatusCode() === 204;
+    }
+
+    /**
+     * @param AuthenticationProvider $authenticationProvider
+     */
+    public function setAuthenticationProvider(AuthenticationProvider $authenticationProvider): void {
+        $this->authenticationProvider = $authenticationProvider;
+    }
+
+    /**
+     * @return AuthenticationProvider
+     */
+    public function getAuthenticationProvider(): AuthenticationProvider {
+        return $this->authenticationProvider;
     }
 }
