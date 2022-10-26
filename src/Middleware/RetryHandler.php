@@ -86,7 +86,7 @@ class RetryHandler
                 || $this->exceedRetriesTimeLimit($delaySecs)) {
                 return $response;
             }
-            $options['delay'] = $delaySecs; // Guzzle sleeps the thread before executing request
+            $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
             $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, $retries + 1);
             $request->getBody()->rewind();
             return $this($request, $options);
@@ -115,7 +115,7 @@ class RetryHandler
                  || $this->exceedRetriesTimeLimit($delaySecs)) {
                 Create::rejectionFor($reason);
             }
-            $options['delay'] = $delaySecs; // Guzzle sleeps the thread before executing request
+            $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
             $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, $retries + 1);
             $request->getBody()->rewind();
             return $this($request, $options);
