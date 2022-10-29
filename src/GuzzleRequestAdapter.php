@@ -306,7 +306,9 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($errorMappings === null || (!isset($errorMappings[$statusCodeAsString]) &&
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
-            throw new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
+            $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
+            $ex->setResponse($response);
+            throw $ex;
         }
         /** @var array{string,string}|null $errorClass */
         $errorClass = $errorMappings[$statusCodeAsString] ?? ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
@@ -315,6 +317,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $rootParseNode = $this->getRootParseNode($response);
             $error = $rootParseNode->getObjectValue($errorClass);
             if (is_subclass_of($error, ApiException::class)) {
+                $error->setResponse($response);
                 throw $error;
             }
             throw new ApiException("Unsupported error type ". get_debug_type($error));

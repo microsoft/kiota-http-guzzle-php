@@ -18,6 +18,12 @@ use Psr\Http\Message\ResponseInterface;
 
 class RetryHandlerTest extends TestCase
 {
+    private RetryOption $testRetryOption;
+
+    public function setUp(): void
+    {
+        $this->testRetryOption = new RetryOption(3, 1);
+    }
 
     public function testRetryStatusCodes()
     {
@@ -44,71 +50,68 @@ class RetryHandlerTest extends TestCase
 
     public function testDelayUsingRetryOption()
     {
-        $delaySecs = 5;
-        $retryOption = (new RetryOption())->setDelay($delaySecs);
+        $delaySecs = 1;
+        $this->testRetryOption->setDelay($delaySecs);
         $mockResponses = [
             new Response(429),
             function (RequestInterface $request, array $options) use ($delaySecs) {
-                if (array_key_exists('delay', $options) && $options['delay'] === $delaySecs) {
+                if (array_key_exists('delay', $options) && $options['delay'] === $delaySecs * 1000) {
                     return new Response(200);
                 }
                 return new \RuntimeException("Expected delay is not set");
             }
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
     public function testDelayUsingRetryAfterHeaderSecondsValue()
     {
-        $retryOption = new RetryOption();
-        $retryAfterSecs = 120;
+        $retryAfterSecs = 2;
         $mockResponses = [
             new Response(429, ['Retry-After' => $retryAfterSecs]),
-            function (RequestInterface $request, array $options) use ($retryOption) {
-                if (array_key_exists('delay', $options) && $options['delay'] > $retryOption->getDelay()) {
+            function (RequestInterface $request, array $options) {
+                if (array_key_exists('delay', $options) && $options['delay'] > $this->testRetryOption->getDelay() * 1000) {
                     return new Response(200);
                 }
                 return new \RuntimeException("Expected delay is not set");
             }
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
     public function testRetryHandlerDelaysUsingRetryAfterHeaderDateValue()
     {
-        $retryOption = new RetryOption();
-        $retryAfterSecs = (new \DateTime())->getTimestamp() + 120;
+        $retryAfterSecs = (new \DateTime())->getTimestamp() + 2;
         $retryAfterDate = new \DateTime("@$retryAfterSecs");
         $mockResponses = [
             new Response(429, ['Retry-After' => $retryAfterDate->format(\DateTimeInterface::RFC7231)]),
-            function (RequestInterface $request, array $options) use ($retryOption) {
-                if (array_key_exists('delay', $options) && $options['delay'] > $retryOption->getDelay()) {
+            function (RequestInterface $request, array $options) {
+                if (array_key_exists('delay', $options) && $options['delay'] > $this->testRetryOption->getDelay() * 1000) {
                     return new Response(200);
                 }
                 return new \RuntimeException("Expected delay is not set");
             }
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
     public function testRetryHandlerDelaysUsingExponentialBackoff()
     {
-        $retryOption = new RetryOption();
         $mockResponses = [
             new Response(429),
             new Response(429),
-            function (RequestInterface $request, array $options) use ($retryOption) {
+            function (RequestInterface $request, array $options) {
                 if (array_key_exists('delay', $options)
-                    && $options['delay'] === RetryHandler::exponentialDelay(2, $retryOption->getDelay())) {
+                    && $options['delay'] === RetryHandler::exponentialDelay(2, $this->testRetryOption->getDelay()) * 1000) {
                     return new Response(200);
                 }
                 return new \RuntimeException("Expected delay is not set");
             }
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
@@ -151,7 +154,7 @@ class RetryHandlerTest extends TestCase
                 return new \RuntimeException("Retry Request body has been manipulated");
             }
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponse, new RetryOption(), ['body' => json_encode($initialRequestBody)]);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponse, $this->testRetryOption, ['body' => json_encode($initialRequestBody)]);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
@@ -161,7 +164,7 @@ class RetryHandlerTest extends TestCase
             new BadResponseException("429 returned", new Request("GET", "/"), new Response(429)),
             new Response(200)
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, new RetryOption(), ['http_errors' => true]);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption, ['http_errors' => true]);
         $this->assertEquals(200, $response->getStatusCode());
     }
 
@@ -180,34 +183,34 @@ class RetryHandlerTest extends TestCase
         $shouldRetry = function (int $delay, int $retries, ResponseInterface $response) {
             return false;
         };
-        $retryOption = (new RetryOption())->setShouldRetry($shouldRetry);
+        $this->testRetryOption->setShouldRetry($shouldRetry);
         $mockResponses = [
             new Response(429)
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(429, $response->getStatusCode());
     }
 
     public function testRetriesTimeLimitIsNotExceeded()
     {
         $retriesTimeLimit = new \DateInterval("PT20S");
-        $retryOption = (new RetryOption())->setDelay(100)->setRetriesTimeLimit($retriesTimeLimit);
+        $this->testRetryOption->setDelay(100)->setRetriesTimeLimit($retriesTimeLimit);
         $mockResponses = [
             new Response(429)
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(429, $response->getStatusCode());
     }
 
     public function testMaxRetriesNotExceeded()
     {
-        $retryOption = (new RetryOption())->setMaxRetries(1);
+        $this->testRetryOption->setMaxRetries(1);
         $mockResponses = [
             new Response(429),
             new Response(429),
             new Response(429)
         ];
-        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $retryOption);
+        $response = $this->executeMockRequestWithRetryHandler($mockResponses, $this->testRetryOption);
         $this->assertEquals(429, $response->getStatusCode());
     }
 
@@ -216,7 +219,7 @@ class RetryHandlerTest extends TestCase
     {
         $mockHandler = new MockHandler($mockResponses);
         $handlerStack = new HandlerStack($mockHandler);
-        $retryOption = $retryOption ?: new RetryOption();
+        $retryOption = $retryOption ?: $this->testRetryOption;
         $handlerStack->push(KiotaMiddleware::retry($retryOption));
 
         $guzzleClient = new Client(['handler' => $handlerStack, 'http_errors' => false]);
