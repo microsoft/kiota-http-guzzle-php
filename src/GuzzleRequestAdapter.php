@@ -13,6 +13,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\Psr7\Request;
 use Http\Promise\FulfilledPromise;
 use Http\Promise\Promise;
+use Microsoft\Kiota\Abstractions\ApiClientBuilder;
 use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
@@ -24,6 +25,7 @@ use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactoryRegistry;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriterFactory;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriterFactoryRegistry;
 use Microsoft\Kiota\Abstractions\Store\BackingStoreFactory;
+use Microsoft\Kiota\Abstractions\Store\BackingStoreFactorySingleton;
 use Microsoft\Kiota\Abstractions\Types\Date;
 use Microsoft\Kiota\Abstractions\Types\Time;
 use Psr\Http\Message\RequestInterface;
@@ -220,7 +222,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     public function enableBackingStore(BackingStoreFactory $backingStoreFactory): void
     {
-        // TODO: Implement enableBackingStore() method.
+        $this->parseNodeFactory = ApiClientBuilder::enableBackingStoreForParseNodeFactory($this->parseNodeFactory);
+        $this->serializationWriterFactory = ApiClientBuilder::enableBackingStoreForSerializationWriterFactory($this->serializationWriterFactory);
+        BackingStoreFactorySingleton::setInstance($backingStoreFactory);
     }
 
     /**
