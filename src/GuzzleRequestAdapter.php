@@ -269,7 +269,8 @@ class GuzzleRequestAdapter implements RequestAdapter
     public function convertToNative(RequestInformation $request): Promise
     {
         return $this->authenticationProvider->authenticateRequest($request)->then(
-            fn (RequestInformation $authenticatedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation($authenticatedRequest)
+            fn (RequestInformation $authenticatedRequest): RequestInterface =>
+                $this->getPsrRequestFromRequestInformation($authenticatedRequest)
         );
     }
 
