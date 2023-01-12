@@ -261,6 +261,20 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
 
     /**
+     * Converts RequestInformation object to an authenticated(containing auth header) PSR-7 Request Object.
+     *
+     * @param RequestInformation $request
+     * @return Promise
+     */
+    public function convertToNative(RequestInformation $request): Promise
+    {
+        return $this->authenticationProvider->authenticateRequest($request)->then(
+            fn (RequestInformation $authenticatedRequest): RequestInterface =>
+                $this->getPsrRequestFromRequestInformation($authenticatedRequest)
+        );
+    }
+
+    /**
      * Gets the root parse node using the parseNodeFactory based on the Content-Type
      *
      * @param ResponseInterface $response
