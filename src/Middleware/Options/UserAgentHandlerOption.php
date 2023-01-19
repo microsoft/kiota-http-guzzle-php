@@ -16,7 +16,8 @@ class UserAgentHandlerOption implements RequestOption
     /** @var callable(RequestInterface $request): PromiseInterface|null */
     private $agentConfigurator;
 
-    public function __construct(?callable $userAgentConfigurator = null) {
+    public function __construct(?callable $userAgentConfigurator = null)
+    {
         $this->agentConfigurator = $userAgentConfigurator;
     }
 
@@ -24,7 +25,8 @@ class UserAgentHandlerOption implements RequestOption
      * Gets the product name.
      * @return string
      */
-    public function getProductName(): string {
+    public function getProductName(): string
+    {
         return $this->productName;
     }
 
@@ -32,7 +34,8 @@ class UserAgentHandlerOption implements RequestOption
      * Gets the Product version
      * @return string
      */
-    public function getProductVersion(): string {
+    public function getProductVersion(): string
+    {
         return $this->productVersion;
     }
 
@@ -40,7 +43,8 @@ class UserAgentHandlerOption implements RequestOption
      * Returns whether the handler is enabled or not.
      * @return bool
      */
-    public function getEnabled(): bool {
+    public function getEnabled(): bool
+    {
         return $this->enabled;
     }
 
@@ -48,7 +52,8 @@ class UserAgentHandlerOption implements RequestOption
      * Sets enabled to true or false.
      * @param bool $enabled
      */
-    public function setEnabled(bool $enabled): void  {
+    public function setEnabled(bool $enabled): void
+    {
         $this->enabled = $enabled;
     }
 
@@ -56,7 +61,8 @@ class UserAgentHandlerOption implements RequestOption
      * Sets the Product name
      * @param string $productName
      */
-    public function setProductName(string $productName): void  {
+    public function setProductName(string $productName): void
+    {
         $this->productName = $productName;
     }
 
@@ -64,7 +70,8 @@ class UserAgentHandlerOption implements RequestOption
      *  Sets the product version.
      * @param string $productVersion
      */
-    public function setProductVersion(string $productVersion): void  {
+    public function setProductVersion(string $productVersion): void
+    {
         $this->productVersion = $productVersion;
     }
 
@@ -72,7 +79,8 @@ class UserAgentHandlerOption implements RequestOption
      * Sets the callable to configure user agent.
      * @param callable $agentConfigurator
      */
-    public function setAgentConfigurator(callable $agentConfigurator): void  {
+    public function setAgentConfigurator(callable $agentConfigurator): void
+    {
         $this->agentConfigurator = $agentConfigurator;
     }
 
@@ -80,7 +88,8 @@ class UserAgentHandlerOption implements RequestOption
      * Gets the callable to configure UserAgent
      * @return callable
      */
-    public function getAgentConfigurator(): callable {
+    public function getAgentConfigurator(): callable
+    {
         return $this->agentConfigurator ?? $this->initUserAgentConfigurator();
     }
 

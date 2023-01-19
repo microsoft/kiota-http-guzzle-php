@@ -20,7 +20,7 @@ class UserAgentHandlerTest extends TestCase
         };
         $userAgentHandlerOption = new UserAgentHandlerOption($userAgentConfigurator);
         $mockResponse = [
-            function (RequestInterface $request, array $options) {
+            function (RequestInterface $request) {
                 $agentHeader = $request->getHeader('User-Agent');
                 if ($agentHeader[0] ?? '' === 'kiota-php/0.4.2') {
                     return new Response(200);
@@ -29,7 +29,11 @@ class UserAgentHandlerTest extends TestCase
             }
         ];
 
-        $response = $this->executeMockRequest($mockResponse, $userAgentHandlerOption, [UserAgentHandlerOption::class => new UserAgentHandlerOption($userAgentConfigurator)]);
+        $response = $this->executeMockRequest(
+            $mockResponse,
+            $userAgentHandlerOption,
+            [UserAgentHandlerOption::class => new UserAgentHandlerOption($userAgentConfigurator)]
+        );
         $this->assertEquals(200, $response->getStatusCode());
     }
 
@@ -49,7 +53,11 @@ class UserAgentHandlerTest extends TestCase
         $this->assertContains('kiota-php/0.1.0', $req->getHeader('User-Agent'));
     }
 
-    private function executeMockRequest(array $mockResponses, ?UserAgentHandlerOption $agentHandlerOption = null, ?array $requestOptions = [])
+    private function executeMockRequest(
+        array $mockResponses,
+        ?UserAgentHandlerOption $agentHandlerOption = null,
+        ?array $requestOptions = []
+    )
     {
         $mockHandler = new MockHandler($mockResponses);
         $handlerStack = new HandlerStack($mockHandler);
