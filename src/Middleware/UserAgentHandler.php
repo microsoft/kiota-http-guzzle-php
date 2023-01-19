@@ -21,12 +21,14 @@ class UserAgentHandler
      * @param callable $nextHandler
      * @param UserAgentHandlerOption|null $agentHandlerOption
      */
-    public function __construct(callable $nextHandler, ?UserAgentHandlerOption $agentHandlerOption) {
+    public function __construct(callable $nextHandler, ?UserAgentHandlerOption $agentHandlerOption)
+    {
         $this->userAgentHandlerOption = $agentHandlerOption ?: new UserAgentHandlerOption();
         $this->nextHandler = $nextHandler;
     }
 
-    public function __invoke(RequestInterface $request, array $options): PromiseInterface {
+    public function __invoke(RequestInterface $request, array $options): PromiseInterface
+    {
         if (array_key_exists(UserAgentHandlerOption::class, $options)) {
             $this->userAgentHandlerOption = $options[UserAgentHandlerOption::class];
         }
@@ -41,7 +43,8 @@ class UserAgentHandler
     /**
      * @return callable
      */
-    public function getNextHandler(): callable {
+    public function getNextHandler(): callable
+    {
         return $this->nextHandler;
     }
 }

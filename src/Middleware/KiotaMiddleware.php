@@ -100,7 +100,8 @@ class KiotaMiddleware
      * @param UserAgentHandlerOption|null $agentHandlerOption
      * @return callable
      */
-    public static function userAgent(?UserAgentHandlerOption $agentHandlerOption = null): callable {
+    public static function userAgent(?UserAgentHandlerOption $agentHandlerOption = null): callable
+    {
         return static function (callable $handler) use ($agentHandlerOption): UserAgentHandler {
             return new UserAgentHandler($handler, $agentHandlerOption);
         };

@@ -84,10 +84,22 @@ class UserAgentHandlerOption implements RequestOption
         return $this->agentConfigurator ?? $this->initUserAgentConfigurator();
     }
 
-    public function getUserAgentHeaderValue(): string {
+    /**
+     * Returns the Product Name and Product version separated by '/'
+     * @return string
+     */
+    public function getUserAgentHeaderValue(): string
+    {
         return $this->getProductName() . '/' . $this->getProductVersion();
     }
-    public function initUserAgentConfigurator(): callable {
+
+    /**
+     * Initializes a User agent configurator for use in cases where no
+     * configurator is specified
+     * @return callable
+     */
+    public function initUserAgentConfigurator(): callable
+    {
         return function (RequestInterface $request) {
             $currentUserAgentHeaderValue = $request->getHeader(UserAgentHandler::USER_AGENT_HEADER_NAME);
             $currentUserAgentHeaderValue []= $this->getUserAgentHeaderValue();
