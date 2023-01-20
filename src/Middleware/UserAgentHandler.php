@@ -41,6 +41,7 @@ class UserAgentHandler
     }
 
     /**
+     * Get the next request handler.
      * @return callable
      */
     public function getNextHandler(): callable
