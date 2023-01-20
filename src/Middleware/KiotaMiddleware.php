@@ -13,6 +13,7 @@ use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use Microsoft\Kiota\Http\Middleware\Options\TelemetryOption;
+use Microsoft\Kiota\Http\Middleware\Options\UserAgentHandlerOption;
 
 /**
  * Class KiotaMiddleware
@@ -91,6 +92,18 @@ class KiotaMiddleware
     {
         return static function (callable $handler) use ($decodingOption): ParametersNameDecodingHandler {
             return new ParametersNameDecodingHandler($handler, $decodingOption);
+        };
+    }
+
+    /**
+     * Middleware that sets the user agent value for the request.
+     * @param UserAgentHandlerOption|null $agentHandlerOption
+     * @return callable
+     */
+    public static function userAgent(?UserAgentHandlerOption $agentHandlerOption = null): callable
+    {
+        return static function (callable $handler) use ($agentHandlerOption): UserAgentHandler {
+            return new UserAgentHandler($handler, $agentHandlerOption);
         };
     }
 }
