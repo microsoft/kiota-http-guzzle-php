@@ -4,13 +4,14 @@ namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use Microsoft\Kiota\Abstractions\RequestOption;
+use Microsoft\Kiota\Http\Constants;
 use Microsoft\Kiota\Http\Middleware\UserAgentHandler;
 use Psr\Http\Message\RequestInterface;
 
 class UserAgentHandlerOption implements RequestOption
 {
     private string $productName = "kiota-php";
-    private string $productVersion = "0.4.2";
+    private string $productVersion = Constants::KIOTA_HTTP_CLIENT_VERSION;
     private bool $enabled = true;
 
     /** @var callable(RequestInterface $request): PromiseInterface|null */
