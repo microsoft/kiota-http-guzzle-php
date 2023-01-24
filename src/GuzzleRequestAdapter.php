@@ -19,7 +19,6 @@ use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
 use Microsoft\Kiota\Abstractions\RequestInformation;
-use Microsoft\Kiota\Abstractions\ResponseHandler;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNode;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactoryRegistry;
@@ -89,14 +88,13 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
-                $this->throwFailedResponse($result, $errorMappings);
-
-                if ($this->is204NoContentResponse($result)) {
-                    return null;
-                }
                 $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
                 if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result);
+                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                }
+                $this->throwFailedResponse($result, $errorMappings);
+                if ($this->is204NoContentResponse($result)) {
+                    return null;
                 }
                 $rootNode = $this->getRootParseNode($result);
                 return $rootNode->getObjectValue($targetCallable);
@@ -127,14 +125,13 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
-                $this->throwFailedResponse($result, $errorMappings);
-
-                if ($this->is204NoContentResponse($result)) {
-                    return new FulfilledPromise(null);
-                }
                 $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
                 if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result);
+                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                }
+                $this->throwFailedResponse($result, $errorMappings);
+                if ($this->is204NoContentResponse($result)) {
+                    return new FulfilledPromise(null);
                 }
                 return $this->getRootParseNode($result)->getCollectionOfObjectValues($targetCallable);
             }
@@ -148,17 +145,16 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
+                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
+                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
+                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                }
                 $this->throwFailedResponse($result, $errorMappings);
-
                 if ($this->is204NoContentResponse($result)) {
                     return null;
                 }
                 if ($primitiveType === StreamInterface::class) {
                     return $result->getBody();
-                }
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result);
                 }
                 $rootParseNode = $this->getRootParseNode($result);
                 switch ($primitiveType) {
@@ -193,14 +189,13 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
-                $this->throwFailedResponse($result, $errorMappings);
-
-                if ($this->is204NoContentResponse($result)) {
-                    return null;
-                }
                 $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
                 if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result);
+                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                }
+                $this->throwFailedResponse($result, $errorMappings);
+                if ($this->is204NoContentResponse($result)) {
+                    return null;
                 }
                 return $this->getRootParseNode($result)->getCollectionOfPrimitiveValues($primitiveType);
             }
@@ -214,11 +209,11 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($requestInfo, $errorMappings) {
-                $this->throwFailedResponse($result, $errorMappings);
                 $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
                 if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result);
+                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
                 }
+                $this->throwFailedResponse($result, $errorMappings);
                 return null;
             }
         );
