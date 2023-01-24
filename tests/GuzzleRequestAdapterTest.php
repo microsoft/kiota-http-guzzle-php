@@ -17,6 +17,7 @@ use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriter;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriterFactory;
 use Microsoft\Kiota\Http\GuzzleRequestAdapter;
+use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use PHPUnit\Framework\TestCase;
 
 class GuzzleRequestAdapterTest extends TestCase
@@ -106,7 +107,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler = $this->createMock(ResponseHandler::class);
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
-        $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'), $customResponseHandler);
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
+        $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'));
     }
 
     public function testSendCollectionAsync(): void
@@ -125,7 +127,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler = $this->createMock(ResponseHandler::class);
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
-        $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'), $customResponseHandler);
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
+        $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'));
     }
 
     public function testSendPrimitiveAsync(): void
@@ -149,7 +152,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler = $this->createMock(ResponseHandler::class);
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
-        $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int', $customResponseHandler);
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
+        $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int');
     }
 
     public function testSendPrimitiveCollectionAsync(): void
@@ -168,7 +172,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler = $this->createMock(ResponseHandler::class);
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
-        $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string', $customResponseHandler);
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
+        $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string');
     }
 
     public function testSendNoContentAsync(): void
@@ -184,7 +189,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler = $this->createMock(ResponseHandler::class);
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
-        $requestAdapter->sendNoContentAsync($this->requestInformation,  $customResponseHandler);
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
+        $requestAdapter->sendNoContentAsync($this->requestInformation);
     }
 
     public function testExceptionThrownOnErrorResponses(): void
