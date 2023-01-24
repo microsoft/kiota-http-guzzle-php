@@ -33,9 +33,9 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $this->requestInformation = new RequestInformation();
         $this->requestInformation->httpMethod = 'GET';
-        $this->requestInformation->headers = [
+        $this->requestInformation->addHeaders([
             'RequestId' => '1'
-        ];
+        ]);
         $this->requestInformation->content = Utils::streamFor('body');
         $this->requestInformation->setUri($this->baseUrl);
 
@@ -89,7 +89,7 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $psrRequest = $this->mockRequestAdapter()->getPsrRequestFromRequestInformation($this->requestInformation);
         $this->assertEquals($this->requestInformation->httpMethod, $psrRequest->getMethod());
-        $this->assertEquals($this->requestInformation->headers['RequestId'], $psrRequest->getHeaderLine('RequestId'));
+        $this->assertEquals($this->requestInformation->getHeaders()->get('RequestId')[0], $psrRequest->getHeaderLine('RequestId'));
         $this->assertEquals('body', $psrRequest->getBody()->getContents());
         $this->assertEquals($this->requestInformation->getUri(), (string)$psrRequest->getUri());
     }

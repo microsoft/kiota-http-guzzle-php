@@ -258,7 +258,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         return new Request(
             $requestInformation->httpMethod,
             $requestInformation->getUri(),
-            $requestInformation->headers,
+            $requestInformation->getHeaders()->getAll(),
             $requestInformation->content
         );
     }
