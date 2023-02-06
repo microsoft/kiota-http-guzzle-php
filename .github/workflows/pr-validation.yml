@@ -27,11 +27,13 @@ jobs:
         run: ./vendor/bin/phpstan
       - name: Run tests
         run: ./vendor/bin/phpunit --coverage-clover=coverage.xml
+      - name: Set PHP Version
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.0'
       - name: Fix code coverage paths
-        if: contains(php-version, '8.0')
         run: sed -i 's@'$GITHUB_WORKSPACE'@/github/workspace/@g' coverage.xml
       - name: SonarCloud Scan
-        if: contains(php-version, '8.0')
         uses: SonarSource/sonarcloud-github-action@master
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
