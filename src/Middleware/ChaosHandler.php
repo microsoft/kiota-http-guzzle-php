@@ -61,8 +61,8 @@ class ChaosHandler
             $this->chaosOption = $options[ChaosOption::class];
         }
 
-        $randomPercentage = rand(0, ChaosOption::MAX_CHAOS_PERCENTAGE);
-        if ($randomPercentage < $this->chaosOption->getChaosPercentage()) {
+        $randomPercentage = rand(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
+        if ($randomPercentage <= $this->chaosOption->getChaosPercentage()) {
             $response = $this->randomChaosResponse($request, $options);
             if ($response) {
                 return Create::promiseFor($response);
