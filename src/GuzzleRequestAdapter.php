@@ -32,6 +32,7 @@ use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
+use RuntimeException;
 
 /**
  * Class GuzzleRequestAdapter
@@ -82,15 +83,34 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
 
     /**
+     * @param RequestInformation $requestInfo
+     * @param ResponseInterface $result
+     * @param array<string, array{string, string}>|null $errorMappings
+     * @return Promise|null
+     */
+    private function tryHandleResponse(RequestInformation $requestInfo, ResponseInterface $result, ?array $errorMappings = null): ?Promise
+    {
+        $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
+        if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
+            $responseHandler = $responseHandlerOption->getResponseHandler();
+            if ($responseHandler !== null) {
+                return $responseHandler->handleResponseAsync($result, $errorMappings);
+            }
+        }
+        return null;
+    }
+
+    /**
      * @inheritDoc
      */
     public function sendAsync(RequestInformation $requestInfo, array $targetCallable, ?array $errorMappings = null): Promise
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+
+                if ($response !== null) {
+                    return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 if ($this->is204NoContentResponse($result)) {
@@ -125,9 +145,10 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+
+                if ($response !== null) {
+                    return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 if ($this->is204NoContentResponse($result)) {
@@ -145,9 +166,10 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+
+                if ($response !== null) {
+                    return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 if ($this->is204NoContentResponse($result)) {
@@ -189,9 +211,10 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+
+                if ($response !== null) {
+                    return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 if ($this->is204NoContentResponse($result)) {
@@ -209,9 +232,10 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         return $this->getHttpResponseMessage($requestInfo)->then(
             function (ResponseInterface $result) use ($requestInfo, $errorMappings) {
-                $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-                if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
-                    return $responseHandlerOption->getResponseHandler()->handleResponseAsync($result, $errorMappings);
+                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+
+                if ($response !== null) {
+                    return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 return null;
@@ -286,12 +310,9 @@ class GuzzleRequestAdapter implements RequestAdapter
     private function getRootParseNode(ResponseInterface $response): ParseNode
     {
         if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
-            throw new \RuntimeException("No response content type header for deserialization");
+            throw new RuntimeException("No response content type header for deserialization");
         }
         $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
-        if (!$contentType) {
-            throw new \RuntimeException("Missing Content-Type header value");
-        }
         return $this->parseNodeFactory->getRootParseNode($contentType[0], $response->getBody());
     }
 
@@ -306,7 +327,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
         $request = $this->authenticationProvider->authenticateRequest($requestInformation);
         return $request->then(
-            function ($result) use ($requestInformation) {
+            function () use ($requestInformation) {
                 $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation);
                 return $this->guzzleClient->send($psrRequest, $requestInformation->getRequestOptions());
             }
@@ -323,8 +344,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($statusCode >= 200 && $statusCode < 400) {
             return;
         }
-        $statusCodeAsString = (string)$statusCode;
-        if ($errorMappings === null || (!isset($errorMappings[$statusCodeAsString]) &&
+        $statusCodeAsString = $statusCode."";
+        if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
             $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
@@ -336,14 +357,18 @@ class GuzzleRequestAdapter implements RequestAdapter
 
         try {
             $rootParseNode = $this->getRootParseNode($response);
-            $error = $rootParseNode->getObjectValue($errorClass);
-            if (is_subclass_of($error, ApiException::class)) {
+            if ($errorClass !== null) {
+                $error = $rootParseNode->getObjectValue($errorClass);
+            } else {
+                $error = null;
+            }
+            if ($error && is_subclass_of($error, ApiException::class)) {
                 $error->setResponse($response);
                 throw $error;
             }
             throw new ApiException("Unsupported error type ". get_debug_type($error));
-        } catch (\RuntimeException $exception){
-            throw new \RuntimeException("", 0, $exception);
+        } catch (RuntimeException $exception){
+            throw new RuntimeException("", 0, $exception);
         }
     }
 

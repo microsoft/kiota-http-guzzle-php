@@ -51,7 +51,7 @@ class KiotaClientFactory
     /**
      * Initialises the client with Guzzle request options (https://docs.guzzlephp.org/en/stable/request-options.html)
      *
-     * @param array $guzzleConfig
+     * @param array<string, mixed> $guzzleConfig
      * @return Client
      */
     public static function createWithConfig(array $guzzleConfig): Client
