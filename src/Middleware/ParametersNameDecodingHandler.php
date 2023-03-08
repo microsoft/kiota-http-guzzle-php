@@ -32,7 +32,7 @@ class ParametersNameDecodingHandler
      */
     private ParametersDecodingOption $decodingOption;
     /**
-     * @var callable(RequestInterface, array): PromiseInterface
+     * @var callable(RequestInterface, array<string,mixed>): PromiseInterface
      */
     private $nextHandler;
 
@@ -48,13 +48,13 @@ class ParametersNameDecodingHandler
 
     /**
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return PromiseInterface
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         // Request-level options override global options
-        if (array_key_exists(ParametersDecodingOption::class, $options)) {
+        if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
             $this->decodingOption = $options[ParametersDecodingOption::class];
         }
         $request = $this->decodeQueryParameters($request);
@@ -72,6 +72,7 @@ class ParametersNameDecodingHandler
             return $request;
         }
         $encodingsToReplace = array_map(function ($character) { return "%".dechex(ord($character)); }, $this->decodingOption->getParametersToDecode());
+        /** @var string $decodedUri */
         $decodedUri = str_ireplace($encodingsToReplace, $this->decodingOption->getParametersToDecode(), $request->getUri());
         return $request->withUri(new Uri($decodedUri));
     }

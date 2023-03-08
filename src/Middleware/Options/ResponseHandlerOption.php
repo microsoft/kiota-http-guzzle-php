@@ -26,7 +26,7 @@ class ResponseHandlerOption implements RequestOption
     /**
      * @var ResponseHandler|null
      */
-    private ?ResponseHandler $responseHandler = null;
+    private ?ResponseHandler $responseHandler;
 
     /**
      * @param ResponseHandler|null $responseHandler custom response handler

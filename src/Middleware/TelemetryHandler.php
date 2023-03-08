@@ -25,7 +25,7 @@ use Psr\Http\Message\RequestInterface;
 class TelemetryHandler
 {
     /**
-     * @var callable(RequestInterface, array):PromiseInterface
+     * @var callable(RequestInterface, array<string, mixed>):PromiseInterface
      * Next handler in the handler stack
      */
     private $nextHandler;
@@ -41,10 +41,15 @@ class TelemetryHandler
         $this->telemetryOption = $telemetryOption;
     }
 
+    /**
+     * @param RequestInterface $request
+     * @param array<string,mixed> $options
+     * @return PromiseInterface
+     */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         // Request-level options override global options
-        if (array_key_exists(TelemetryOption::class, $options)) {
+        if (array_key_exists(TelemetryOption::class, $options) && $options[TelemetryOption::class] instanceof TelemetryOption) {
             $this->telemetryOption = $options[TelemetryOption::class];
         }
         if ($this->telemetryOption && $this->telemetryOption->getTelemetryConfigurator()) {

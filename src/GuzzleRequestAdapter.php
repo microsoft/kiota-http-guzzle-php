@@ -85,7 +85,7 @@ class GuzzleRequestAdapter implements RequestAdapter
     /**
      * @param RequestInformation $requestInfo
      * @param ResponseInterface $result
-     * @param array<string, array{string, string}>|null $errorMappings
+     * @param array<string,array{string,string}>|null $errorMappings
      * @return Promise|null
      */
     private function tryHandleResponse(RequestInformation $requestInfo, ResponseInterface $result, ?array $errorMappings = null): ?Promise
@@ -94,6 +94,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
             $responseHandler = $responseHandlerOption->getResponseHandler();
             if ($responseHandler !== null) {
+                /** @phpstan-ignore-next-line False alarm?*/
                 return $responseHandler->handleResponseAsync($result, $errorMappings);
             }
         }
@@ -344,7 +345,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($statusCode >= 200 && $statusCode < 400) {
             return;
         }
-        $statusCodeAsString = $statusCode."";
+        $statusCodeAsString = "$statusCode";
         if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
@@ -353,7 +354,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             throw $ex;
         }
         /** @var array{string,string}|null $errorClass */
-        $errorClass = $errorMappings[$statusCodeAsString] ?? ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
+        $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
         try {
             $rootParseNode = $this->getRootParseNode($response);
