@@ -24,22 +24,22 @@ use Microsoft\Kiota\Abstractions\ResponseHandler;
 class ResponseHandlerOption implements RequestOption
 {
     /**
-     * @var ResponseHandler|null
+     * @var ResponseHandler
      */
-    private ?ResponseHandler $responseHandler;
+    private ResponseHandler $responseHandler;
 
     /**
-     * @param ResponseHandler|null $responseHandler custom response handler
+     * @param ResponseHandler $responseHandler custom response handler
      */
-    public function __construct(?ResponseHandler $responseHandler = null)
+    public function __construct(ResponseHandler $responseHandler)
     {
         $this->responseHandler = $responseHandler;
     }
 
     /**
-     * @return ResponseHandler|null
+     * @return ResponseHandler
      */
-    public function getResponseHandler(): ?ResponseHandler
+    public function getResponseHandler(): ResponseHandler
     {
         return $this->responseHandler;
     }

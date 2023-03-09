@@ -93,10 +93,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
         if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
             $responseHandler = $responseHandlerOption->getResponseHandler();
-            if ($responseHandler !== null) {
-                /** @phpstan-ignore-next-line False alarm?*/
-                return $responseHandler->handleResponseAsync($result, $errorMappings);
-            }
+            /** @phpstan-ignore-next-line False alarm?*/
+            return $responseHandler->handleResponseAsync($result, $errorMappings);
         }
         return null;
     }
@@ -111,7 +109,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
-                    return $result;
+                    return $response;
                 }
                 $this->throwFailedResponse($result, $errorMappings);
                 if ($this->is204NoContentResponse($result)) {
@@ -356,21 +354,17 @@ class GuzzleRequestAdapter implements RequestAdapter
         /** @var array{string,string}|null $errorClass */
         $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
-        try {
-            $rootParseNode = $this->getRootParseNode($response);
-            if ($errorClass !== null) {
-                $error = $rootParseNode->getObjectValue($errorClass);
-            } else {
-                $error = null;
-            }
-            if ($error && is_subclass_of($error, ApiException::class)) {
-                $error->setResponseStatusCode($response->getStatusCode());
-                throw $error;
-            }
-            throw new ApiException("Unsupported error type ". get_debug_type($error));
-        } catch (RuntimeException $exception){
-            throw new RuntimeException("", 0, $exception);
+        $rootParseNode = $this->getRootParseNode($response);
+        if ($errorClass !== null) {
+            $error = $rootParseNode->getObjectValue($errorClass);
+        } else {
+            $error = null;
         }
+        if ($error && is_subclass_of($error, ApiException::class)) {
+            $error->setResponseStatusCode($response->getStatusCode());
+            throw $error;
+        }
+        throw new ApiException("Unsupported error type ". get_debug_type($error));
     }
 
     /**

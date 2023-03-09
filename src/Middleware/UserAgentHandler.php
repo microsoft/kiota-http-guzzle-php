@@ -3,7 +3,6 @@
 namespace Microsoft\Kiota\Http\Middleware;
 
 use GuzzleHttp\Promise\PromiseInterface;
-use http\Client;
 use Microsoft\Kiota\Abstractions\RequestOption;
 use Microsoft\Kiota\Http\Middleware\Options\UserAgentHandlerOption;
 use Psr\Http\Message\RequestInterface;
