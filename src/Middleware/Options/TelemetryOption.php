@@ -25,7 +25,7 @@ use Psr\Http\Message\RequestInterface;
 class TelemetryOption implements RequestOption
 {
     /**
-     * @var callable(RequestInterface):RequestInterface
+     * @var callable(RequestInterface):RequestInterface|null
      * Function that adds appropriate telemetry information to a request
      */
     private $telemetryConfigurator;

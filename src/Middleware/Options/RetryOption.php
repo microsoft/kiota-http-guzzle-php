@@ -48,7 +48,7 @@ class RetryOption implements RequestOption
      */
     private ?\DateInterval $retriesTimeLimit = null;
     /**
-     * @var callable(int, int, ResponseInterface):bool $sh Custom callback function to determine if request should be retried
+     * @var callable(int, int, ResponseInterface):bool $shouldRetry Custom callback function to determine if request should be retried
      * The callback should accept a delay time in seconds, number of retry attempts and a {@link ResponseInterface} and return a bool
      */
     private $shouldRetry;

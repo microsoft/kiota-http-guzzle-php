@@ -45,9 +45,9 @@ class CompressionOption implements RequestOption
     }
 
     /**
-     * @param callable[] $callbacks {@link $compressionCallbacks}
+     * @param array<callable(RequestInterface):RequestInterface> $callbacks {@link $compressionCallbacks}
      */
-    public function setCallbacks(array $callbacks) {
+    public function setCallbacks(array $callbacks): void {
         $this->compressionCallbacks = $callbacks;
     }
 
