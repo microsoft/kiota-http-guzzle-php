@@ -19,6 +19,7 @@ use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
 use Microsoft\Kiota\Abstractions\RequestInformation;
+use Microsoft\Kiota\Abstractions\Serialization\Parsable;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNode;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactoryRegistry;
@@ -334,8 +335,9 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
 
     /**
+     * @template T of Parsable
      * @param ResponseInterface $response
-     * @param array<string, array{string, string}>|null $errorMappings
+     * @param array<string, array{class-string<T>, string}>|null $errorMappings
      * @throws ApiException
      */
     private function throwFailedResponse(ResponseInterface $response, ?array $errorMappings): void {
@@ -351,7 +353,6 @@ class GuzzleRequestAdapter implements RequestAdapter
             $ex->setResponseStatusCode($response->getStatusCode());
             throw $ex;
         }
-        /** @var array{string,string}|null $errorClass */
         $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
         $rootParseNode = $this->getRootParseNode($response);
