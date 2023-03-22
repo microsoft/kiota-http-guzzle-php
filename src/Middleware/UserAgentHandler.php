@@ -3,6 +3,7 @@
 namespace Microsoft\Kiota\Http\Middleware;
 
 use GuzzleHttp\Promise\PromiseInterface;
+use Microsoft\Kiota\Abstractions\RequestOption;
 use Microsoft\Kiota\Http\Middleware\Options\UserAgentHandlerOption;
 use Psr\Http\Message\RequestInterface;
 
@@ -14,7 +15,7 @@ class UserAgentHandler
     public const USER_AGENT_HEADER_NAME = 'User-Agent';
 
     private UserAgentHandlerOption $userAgentHandlerOption;
-    /** @var callable(RequestInterface, array): PromiseInterface $nextHandler  */
+    /** @var callable(RequestInterface, array<string, RequestOption>): PromiseInterface $nextHandler  */
     private $nextHandler;
 
     /**
@@ -27,22 +28,28 @@ class UserAgentHandler
         $this->nextHandler = $nextHandler;
     }
 
+    /**
+     * @param RequestInterface $request
+     * @param array<string, RequestOption> $options
+     * @return PromiseInterface
+     */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        if (array_key_exists(UserAgentHandlerOption::class, $options)) {
+        if (array_key_exists(UserAgentHandlerOption::class, $options) &&
+            $options[UserAgentHandlerOption::class] instanceof UserAgentHandlerOption) {
             $this->userAgentHandlerOption = $options[UserAgentHandlerOption::class];
         }
 
-        if ($this->userAgentHandlerOption->getAgentConfigurator()) {
-            $request = call_user_func($this->userAgentHandlerOption->getAgentConfigurator(), $request);
-        }
-        $fn = $this->getNextHandler();
-        return call_user_func($fn, $request, $options);
+        /** @var RequestInterface $request */
+        $request = call_user_func($this->userAgentHandlerOption->getAgentConfigurator(), $request);
+        /** @var PromiseInterface $result */
+        $result = call_user_func($this->getNextHandler(), $request, $options);
+        return $result;
     }
 
     /**
      * Get the next request handler.
-     * @return callable
+     * @return callable(RequestInterface,array<string, RequestOption>): PromiseInterface
      */
     public function getNextHandler(): callable
     {

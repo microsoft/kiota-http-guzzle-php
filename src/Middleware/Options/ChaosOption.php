@@ -10,6 +10,8 @@ namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use Microsoft\Kiota\Abstractions\RequestOption;
 use Microsoft\Kiota\Http\Middleware\ChaosHandler;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * Class ChaosOption
@@ -31,13 +33,13 @@ class ChaosOption implements RequestOption
     private int $chaosPercentage;
 
     /**
-     * @var array set of chaos ResponseInterfaces or callables(RequestInterface, array):ResponseInterface that are returned/executed at random.
+     * @var array<callable(RequestInterface, array<string,mixed>):ResponseInterface|ResponseInterface> set of chaos ResponseInterfaces or callables(RequestInterface, array):ResponseInterface that are returned/executed at random.
      */
     private array $chaosResponses = [];
 
     /**
      * @param int $chaosPercentage
-     * @param array $chaosResponses
+     * @param array<callable(RequestInterface, array<string,mixed>):ResponseInterface|ResponseInterface> $chaosResponses
      */
     public function __construct(array $chaosResponses = [], int $chaosPercentage = 10)
     {
@@ -69,7 +71,7 @@ class ChaosOption implements RequestOption
     }
 
     /**
-     * @param array $chaosResponses
+     * @param array<callable(RequestInterface, array<string,mixed>):ResponseInterface|ResponseInterface> $chaosResponses
      */
     public function setChaosResponses(array $chaosResponses): void
     {
@@ -77,7 +79,7 @@ class ChaosOption implements RequestOption
     }
 
     /**
-     * @return array
+     * @return array<callable(RequestInterface, array<string,mixed>):ResponseInterface|ResponseInterface>
      */
     public function getChaosResponses(): array
     {

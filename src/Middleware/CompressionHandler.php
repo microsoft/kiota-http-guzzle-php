@@ -8,6 +8,7 @@
 
 namespace Microsoft\Kiota\Http\Middleware;
 
+use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
@@ -35,7 +36,7 @@ class CompressionHandler
     private CompressionOption $compressionOption;
 
     /**
-     * @var callable(RequestInterface, array): PromiseInterface
+     * @var callable(RequestInterface, array<string,mixed>): PromiseInterface
      * Next handler to be called in the middleware pipeline
      */
     private $nextHandler;
@@ -57,13 +58,13 @@ class CompressionHandler
 
     /**
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string,mixed> $options
      * @return PromiseInterface
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         // Request-level options override global options
-        if (array_key_exists(CompressionOption::class, $options)) {
+        if (array_key_exists(CompressionOption::class, $options) && $options[CompressionOption::class] instanceof CompressionOption) {
             $this->compressionOption = $options[CompressionOption::class];
         }
 
@@ -82,7 +83,7 @@ class CompressionHandler
     /**
      * Returns true if the request's options indicate it's a retry attempt
      *
-     * @param array $options
+     * @param array<string,mixed> $options
      * @return bool
      */
     private function isRetryAttempt(array $options): bool
@@ -93,7 +94,7 @@ class CompressionHandler
     /**
      * Retries the request if 415 response was received
      *
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return callable
      */
     private function onFulfilled(array $options): callable
@@ -110,14 +111,14 @@ class CompressionHandler
     /**
      * Retry only if guzzle BadResponseException was thrown with a 415 status code
      *
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return callable
      */
     private function onRejected(array $options): callable
     {
         return function ($reason) use ($options) {
             // Only consider 415 BadResponseException in case guzzle http_errors = true
-            if (is_a($reason, \GuzzleHttp\Exception\BadResponseException::class)) {
+            if (is_a($reason, BadResponseException::class)) {
                 if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
                     $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
                     return $this($this->originalRequest, $options);

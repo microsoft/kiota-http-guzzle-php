@@ -11,7 +11,6 @@ namespace Microsoft\Kiota\Http\Middleware;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Response;
-use Microsoft\Kiota\Abstractions\RequestOption;
 use Microsoft\Kiota\Http\Middleware\Options\ChaosOption;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
@@ -51,13 +50,13 @@ class ChaosHandler
 
     /**
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string,mixed> $options
      * @return PromiseInterface
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         // Request-level options override global options
-        if (array_key_exists(ChaosOption::class, $options)) {
+        if (array_key_exists(ChaosOption::class, $options) && $options[ChaosOption::class] instanceof ChaosOption) {
             $this->chaosOption = $options[ChaosOption::class];
         }
 
@@ -77,7 +76,7 @@ class ChaosHandler
      * from pre-configured possible responses per HTTP request method
      *
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return ResponseInterface|null
      */
     private function randomChaosResponse(RequestInterface $request, array $options): ?ResponseInterface

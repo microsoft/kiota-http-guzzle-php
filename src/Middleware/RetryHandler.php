@@ -8,12 +8,16 @@
 
 namespace Microsoft\Kiota\Http\Middleware;
 
+use DateTime;
+use DateTimeInterface;
 use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
+use RuntimeException;
+use function pow;
 
 /**
  * Class RetryHandler
@@ -35,7 +39,7 @@ class RetryHandler
      */
     private RetryOption $retryOption;
     /**
-     * @var callable(RequestInterface, array): PromiseInterface
+     * @var callable(RequestInterface, array<string,mixed>): PromiseInterface $nextHandler
      */
     private $nextHandler;
 
@@ -51,13 +55,13 @@ class RetryHandler
 
     /**
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return PromiseInterface
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
         // Request-level options override global options
-        if (array_key_exists(RetryOption::class, $options)) {
+        if (array_key_exists(RetryOption::class, $options) && $options[RetryOption::class] instanceof RetryOption) {
             $this->retryOption = $options[RetryOption::class];
         }
         $fn = $this->nextHandler;
@@ -71,7 +75,7 @@ class RetryHandler
      * Handles retry for a successful request
      *
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string, mixed> $options
      * @return callable
      */
     private function onFulfilled(RequestInterface $request, array $options): callable
@@ -87,7 +91,7 @@ class RetryHandler
                 return $response;
             }
             $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
-            $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, $retries + 1);
+            $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
             $request->getBody()->rewind();
             return $this($request, $options);
         };
@@ -98,14 +102,14 @@ class RetryHandler
      * BadResponseException is thrown for 4xx and 5xx responses if configured on Guzzle client
      *
      * @param RequestInterface $request
-     * @param array $options
+     * @param array<string,mixed> $options
      * @return callable
      */
     private function onRejected(RequestInterface $request, array $options): callable
     {
         return function ($reason) use ($request, $options) {
             // No retry for network-related/other exceptions
-            if (!is_a($reason, \GuzzleHttp\Exception\BadResponseException::class)) {
+            if (!is_a($reason, BadResponseException::class)) {
                 return Create::rejectionFor($reason);
             }
 
@@ -116,7 +120,7 @@ class RetryHandler
                 Create::rejectionFor($reason);
             }
             $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
-            $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, $retries + 1);
+            $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
             $request->getBody()->rewind();
             return $this($request, $options);
         };
@@ -133,10 +137,10 @@ class RetryHandler
      */
     private function shouldRetry(RequestInterface $request, int $retries, int $delaySecs, ?ResponseInterface $response): bool
     {
-        return (($retries < $this->retryOption->getMaxRetries())
+        return ((($retries < $this->retryOption->getMaxRetries())
                     && $this->isPayloadRewindable($request)
-                    && $this->retryOption->getShouldRetry()($delaySecs, $retries, $response)
-                    && (!$response || $this->isRetryStatusCode($response->getStatusCode()))
+                    && ($response && $this->retryOption->getShouldRetry()($delaySecs, $retries, $response))
+                    && $this->isRetryStatusCode($response->getStatusCode())) || !$response
         );
     }
 
@@ -214,7 +218,7 @@ class RetryHandler
      */
     private function isPayloadRewindable(RequestInterface $request): bool
     {
-        return ($request->getBody() && $request->getBody()->isSeekable());
+        return $request->getBody()->isSeekable();
     }
 
     /**
@@ -228,11 +232,11 @@ class RetryHandler
         if (is_numeric($retryAfterValue)) {
             return intval($retryAfterValue);
         }
-        $retryAfterDateTime = \DateTime::createFromFormat(\DateTimeInterface::RFC7231, $retryAfterValue);
+        $retryAfterDateTime = DateTime::createFromFormat(DateTimeInterface::RFC7231, $retryAfterValue);
         if (!$retryAfterDateTime) {
-            throw new \RuntimeException("Unable to parse Retry-After header value $retryAfterValue");
+            throw new RuntimeException("Unable to parse Retry-After header value $retryAfterValue");
         }
-        return $retryAfterDateTime->getTimestamp() - (new \DateTime())->getTimestamp();
+        return $retryAfterDateTime->getTimestamp() - (new DateTime())->getTimestamp();
     }
 
     /**
@@ -244,6 +248,6 @@ class RetryHandler
      */
     public static function exponentialDelay(int $retries, int $delaySecs): int
     {
-        return (int) \pow(2, $retries - 1) * $delaySecs;
+        return (int) pow(2, $retries - 1) * $delaySecs;
     }
 }
