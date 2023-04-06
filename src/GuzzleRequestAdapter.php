@@ -375,7 +375,6 @@ class GuzzleRequestAdapter implements RequestAdapter
             $claims = $matches[1];
             /** @var ResponseInterface $response */
             $response =  $this->getHttpResponseMessage($request, $claims)->wait();
-            return $response;
         }
         return $response;
     }
