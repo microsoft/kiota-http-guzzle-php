@@ -4,6 +4,7 @@ namespace Microsoft\Kiota\Http\Test;
 
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\Utils;
 use Http\Promise\FulfilledPromise;
@@ -198,6 +199,52 @@ class GuzzleRequestAdapterTest extends TestCase
         $this->expectException(ApiException::class);
         $requestAdapter = $this->mockRequestAdapter([new Response(400, ['Content-Type' => 'application/json'])]);
         $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
+    }
+
+    public function testCAEFailureCausesRetry(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter(
+            [
+                new Response(401, [
+                    'WWW-Authenticate' => 'Bearer authorization_uri="https://login.windows.net/common/oauth2/authorize",'.
+                        'error="insufficient_claims",'.
+                        'claims="eyJhY2Nlc3NfdG9rZW4iOnsibmJmIjp7ImVzc2VudGlhbCI6dHJ1ZSwgInZhbHVlIjoiMTYwNDEwNjY1MSJ0="'
+                ]),
+                function (Request $request) {
+                    $this->assertEquals('body', $request->getBody()->getContents());
+                    return new Response(200, ['Content-Type' => 'application/json']);
+                }
+            ]
+        );
+        $this->authenticationProvider->expects($this->exactly(2))
+                                    ->method('authenticateRequest')
+                                    ->withConsecutive(
+                                        [$this->anything(), []],
+                                        [$this->anything(), ['claims' => 'eyJhY2Nlc3NfdG9rZW4iOnsibmJmIjp7ImVzc2VudGlhbCI6dHJ1ZSwgInZhbHVlIjoiMTYwNDEwNjY1MSJ0=']]
+                                    );
+        $response = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
+        $this->assertEquals(1, $response);
+    }
+
+    public function testCAEFailureRetriesOnlyOnce(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter(
+            [
+                new Response(401, [
+                    'WWW-Authenticate' => 'Bearer authorization_uri="https://login.windows.net/common/oauth2/authorize",'.
+                        'error="insufficient_claims",'.
+                        'claims="eyJhY2Nlc3NfdG9rZW4iOnsibmJmIjp7ImVzc2VudGlhbCI6dHJ1ZSwgInZhbHVlIjoiMTYwNDEwNjY1MSJ0="'
+                ]),
+                new Response(401, [
+                    'WWW-Authenticate' => 'Bearer authorization_uri="https://login.windows.net/common/oauth2/authorize",'.
+                        'error="insufficient_claims",'.
+                        'claims="eyJhY2Nlc3NfdG9rZW4iOnsibmJmIjp7ImVzc2VudGlhbCI6dHJ1ZSwgInZhbHVlIjoiMTYwNDEwNjY1MSJ0="'
+                ]),
+            ]
+        );
+        $this->expectException(ApiException::class);
+        $this->authenticationProvider->expects($this->exactly(2))->method('authenticateRequest');
+        $response = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
     }
 
 }
