@@ -68,9 +68,9 @@ class KiotaClientFactory
     {
         $handlerStack = new HandlerStack(Utils::chooseHandler());
         $handlerStack->push(KiotaMiddleware::parameterNamesDecoding());
-        $handlerStack->push(KiotaMiddleware::retry());
-        $handlerStack->push(KiotaMiddleware::userAgent());
         $handlerStack->push(GuzzleMiddleware::redirect());
+        $handlerStack->push(KiotaMiddleware::userAgent());
+        $handlerStack->push(KiotaMiddleware::retry());
         return $handlerStack;
     }
 }
