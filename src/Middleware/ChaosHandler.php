@@ -28,6 +28,7 @@ use Psr\Http\Message\ResponseInterface;
  */
 class ChaosHandler
 {
+    public const HANDLER_NAME = 'kiotaChaosHandler';
     /**
      * @var callable Next handler in the middleware pipeline
      */

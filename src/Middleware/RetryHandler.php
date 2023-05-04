@@ -31,6 +31,7 @@ use function pow;
  */
 class RetryHandler
 {
+    public const HANDLER_NAME = 'kiotaRetryHandler';
     private const RETRY_AFTER_HEADER = "Retry-After";
     private const RETRY_ATTEMPT_HEADER = "Retry-Attempt";
 
