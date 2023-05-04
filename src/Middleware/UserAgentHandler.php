@@ -12,6 +12,7 @@ use Psr\Http\Message\RequestInterface;
  */
 class UserAgentHandler
 {
+    public const HANDLER_NAME = 'kiotaUserAgentHandler';
     public const USER_AGENT_HEADER_NAME = 'User-Agent';
 
     private UserAgentHandlerOption $userAgentHandlerOption;

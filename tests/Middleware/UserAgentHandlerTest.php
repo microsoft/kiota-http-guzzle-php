@@ -3,6 +3,7 @@
 namespace Microsoft\Kiota\Http\Test\Middleware;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Psr7\Response;
@@ -50,7 +51,7 @@ class UserAgentHandlerTest extends TestCase
 
         $response = $this->executeMockRequest($mockResponse, $agentHandlerOption);
         $this->assertEquals(200, $response->getStatusCode());
-        $this->assertContains('kiota-php/0.1.0', $req->getHeader('User-Agent'));
+        $this->assertContains('GuzzleHttp/'.ClientInterface::MAJOR_VERSION.' kiota-php/0.1.0', $req->getHeader('User-Agent'));
     }
 
     private function executeMockRequest(

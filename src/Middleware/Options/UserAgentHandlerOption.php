@@ -111,8 +111,11 @@ class UserAgentHandlerOption implements RequestOption
     public function initUserAgentConfigurator(): callable
     {
         return function (RequestInterface $request) {
-            $currentUserAgentHeaderValue = $request->getHeader(UserAgentHandler::USER_AGENT_HEADER_NAME);
-            $currentUserAgentHeaderValue []= $this->getUserAgentHeaderValue();
+            $currentUserAgentHeaderValue = $request->getHeaderLine(UserAgentHandler::USER_AGENT_HEADER_NAME);
+            if ($currentUserAgentHeaderValue) {
+                $currentUserAgentHeaderValue .= " ";
+            }
+            $currentUserAgentHeaderValue .= $this->getUserAgentHeaderValue();
             return $request->withHeader(UserAgentHandler::USER_AGENT_HEADER_NAME, $currentUserAgentHeaderValue);
         };
     }
