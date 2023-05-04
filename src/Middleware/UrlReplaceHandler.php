@@ -42,11 +42,13 @@ class UrlReplaceHandler
 
     public function __invoke(RequestInterface $request, array $options)
     {
-        if (array_key_exists(UrlReplaceOption::class, $options) && $options[UrlReplaceOption::class] instanceof UrlReplaceOption) {
+        if (array_key_exists(UrlReplaceOption::class, $options) &&
+            $options[UrlReplaceOption::class] instanceof UrlReplaceOption) {
             $this->urlReplaceOptions = $options[UrlReplaceOption::class];
         }
         $fn = $this->nextHandler;
-        if (!$this->getUrlReplaceOptions()->isEnabled() || empty($this->getUrlReplaceOptions()->getReplacementPairs())) {
+        if (!$this->getUrlReplaceOptions()->isEnabled() ||
+            empty($this->getUrlReplaceOptions()->getReplacementPairs())) {
             return $fn($request, $options);
         }
         $request = $this->replaceUrlSegment($request);
