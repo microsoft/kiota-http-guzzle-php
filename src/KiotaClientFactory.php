@@ -14,6 +14,9 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware as GuzzleMiddleware;
 use GuzzleHttp\Utils;
 use Microsoft\Kiota\Http\Middleware\KiotaMiddleware;
+use Microsoft\Kiota\Http\Middleware\ParametersNameDecodingHandler;
+use Microsoft\Kiota\Http\Middleware\RetryHandler;
+use Microsoft\Kiota\Http\Middleware\UserAgentHandler;
 
 /**
  * Class KiotaClientFactory
@@ -67,10 +70,10 @@ class KiotaClientFactory
     public static function getDefaultHandlerStack(): HandlerStack
     {
         $handlerStack = new HandlerStack(Utils::chooseHandler());
-        $handlerStack->push(KiotaMiddleware::parameterNamesDecoding());
-        $handlerStack->push(KiotaMiddleware::retry());
-        $handlerStack->push(KiotaMiddleware::userAgent());
-        $handlerStack->push(GuzzleMiddleware::redirect());
+        $handlerStack->push(KiotaMiddleware::parameterNamesDecoding(), ParametersNameDecodingHandler::HANDLER_NAME);
+        $handlerStack->push(GuzzleMiddleware::redirect(), 'kiotaRedirectHandler');
+        $handlerStack->push(KiotaMiddleware::userAgent(), UserAgentHandler::HANDLER_NAME);
+        $handlerStack->push(KiotaMiddleware::retry(), RetryHandler::HANDLER_NAME);
         return $handlerStack;
     }
 }

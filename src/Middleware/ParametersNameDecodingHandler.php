@@ -28,6 +28,10 @@ use Psr\Http\Message\RequestInterface;
 class ParametersNameDecodingHandler
 {
     /**
+     * Handler name to reference within the handler stack
+     */
+    public const HANDLER_NAME = "kiotaParameterNamesDecodingHandler";
+    /**
      * @var ParametersDecodingOption configuration for the middleware
      */
     private ParametersDecodingOption $decodingOption;

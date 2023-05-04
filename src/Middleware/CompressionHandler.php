@@ -28,6 +28,7 @@ use Psr\Http\Message\ResponseInterface;
  */
 class CompressionHandler
 {
+    public const HANDLER_NAME = 'kiotaCompressionHandler';
     private const COMPRESSION_RETRY_ATTEMPT = 'compressionRetryAttempt';
 
     /**
