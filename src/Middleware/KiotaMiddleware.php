@@ -13,6 +13,7 @@ use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use Microsoft\Kiota\Http\Middleware\Options\TelemetryOption;
+use Microsoft\Kiota\Http\Middleware\Options\UrlReplaceOption;
 use Microsoft\Kiota\Http\Middleware\Options\UserAgentHandlerOption;
 
 /**
@@ -104,6 +105,13 @@ class KiotaMiddleware
     {
         return static function (callable $handler) use ($agentHandlerOption): UserAgentHandler {
             return new UserAgentHandler($handler, $agentHandlerOption);
+        };
+    }
+
+    public static function urlReplace(?UrlReplaceOption $urlReplaceOption = null): callable
+    {
+        return static function (callable $handler) use ($urlReplaceOption): UrlReplaceHandler {
+            return new UrlReplaceHandler($handler, $urlReplaceOption ?? (new UrlReplaceOption(false, [])));
         };
     }
 }
