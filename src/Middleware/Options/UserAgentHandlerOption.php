@@ -112,8 +112,9 @@ class UserAgentHandlerOption implements RequestOption
     {
         return function (RequestInterface $request) {
             $currentUserAgentHeaderValue = $request->getHeaderLine(UserAgentHandler::USER_AGENT_HEADER_NAME);
-            if ($currentUserAgentHeaderValue)
+            if ($currentUserAgentHeaderValue) {
                 $currentUserAgentHeaderValue .= " ";
+            }
             $currentUserAgentHeaderValue .= $this->getUserAgentHeaderValue();
             return $request->withHeader(UserAgentHandler::USER_AGENT_HEADER_NAME, $currentUserAgentHeaderValue);
         };
