@@ -9,7 +9,7 @@
 namespace Microsoft\Kiota\Http;
 
 
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Psr7\Request;
 use Http\Promise\FulfilledPromise;
 use Http\Promise\Promise;
@@ -45,9 +45,9 @@ use RuntimeException;
 class GuzzleRequestAdapter implements RequestAdapter
 {
     /**
-     * @var Client
+     * @var ClientInterface
      */
-    private Client $guzzleClient;
+    private ClientInterface $guzzleClient;
 
     /**
      * @var AuthenticationProvider
@@ -74,12 +74,12 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param AuthenticationProvider $authenticationProvider
      * @param ParseNodeFactory|null $parseNodeFactory
      * @param SerializationWriterFactory|null $serializationWriterFactory
-     * @param Client|null $guzzleClient
+     * @param ClientInterface|null $guzzleClient
      */
     public function __construct(AuthenticationProvider $authenticationProvider,
                                 ?ParseNodeFactory $parseNodeFactory = null,
                                 ?SerializationWriterFactory $serializationWriterFactory = null,
-                                ?Client $guzzleClient = null)
+                                ?ClientInterface $guzzleClient = null)
     {
         $this->authenticationProvider = $authenticationProvider;
         $this->parseNodeFactory = ($parseNodeFactory) ?: ParseNodeFactoryRegistry::getDefaultInstance();
