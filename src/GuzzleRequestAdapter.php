@@ -9,7 +9,7 @@
 namespace Microsoft\Kiota\Http;
 
 
-use GuzzleHttp\Client;
+use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Psr7\Request;
 use Http\Promise\FulfilledPromise;
 use Http\Promise\Promise;
@@ -45,9 +45,9 @@ use RuntimeException;
 class GuzzleRequestAdapter implements RequestAdapter
 {
     /**
-     * @var Client
+     * @var ClientInterface
      */
-    private Client $guzzleClient;
+    private ClientInterface $guzzleClient;
 
     /**
      * @var AuthenticationProvider
@@ -66,16 +66,20 @@ class GuzzleRequestAdapter implements RequestAdapter
 
     private string $baseUrl = '';
 
+    private static string $wwwAuthenticateHeader = 'WWW-Authenticate';
+
+    private static string $claimsRegex = "/claims=\"(.+)\"/";
+
     /**
      * @param AuthenticationProvider $authenticationProvider
      * @param ParseNodeFactory|null $parseNodeFactory
      * @param SerializationWriterFactory|null $serializationWriterFactory
-     * @param Client|null $guzzleClient
+     * @param ClientInterface|null $guzzleClient
      */
     public function __construct(AuthenticationProvider $authenticationProvider,
                                 ?ParseNodeFactory $parseNodeFactory = null,
                                 ?SerializationWriterFactory $serializationWriterFactory = null,
-                                ?Client $guzzleClient = null)
+                                ?ClientInterface $guzzleClient = null)
     {
         $this->authenticationProvider = $authenticationProvider;
         $this->parseNodeFactory = ($parseNodeFactory) ?: ParseNodeFactoryRegistry::getDefaultInstance();
@@ -320,18 +324,59 @@ class GuzzleRequestAdapter implements RequestAdapter
      * Authenticates and executes the request
      *
      * @param RequestInformation $requestInformation
+     * @param string $claims additional claims to request if CAE fails
      * @return Promise
      */
-    private function getHttpResponseMessage(RequestInformation $requestInformation): Promise
+    private function getHttpResponseMessage(RequestInformation $requestInformation, string $claims = ""): Promise
     {
         $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
-        $request = $this->authenticationProvider->authenticateRequest($requestInformation);
+        $additionalAuthContext = $claims ? ['claims' => $claims] : [];
+        $request = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
         return $request->then(
             function () use ($requestInformation) {
                 $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation);
                 return $this->guzzleClient->send($psrRequest, $requestInformation->getRequestOptions());
             }
+        )->then(
+            function (ResponseInterface $response) use ($requestInformation, $claims) {
+                return $this->retryCAEResponseIfRequired($response, $requestInformation, $claims);
+            }
         );
+    }
+
+    /**
+     * @param ResponseInterface $response
+     * @param RequestInformation $request
+     * @param string $claims
+     * @return ResponseInterface
+     * @throws \Exception
+     */
+    private function retryCAEResponseIfRequired(
+        ResponseInterface $response,
+        RequestInformation $request,
+        string $claims
+    ): ResponseInterface
+    {
+        if ($response->getStatusCode() == 401
+            && !$claims // fail if previous claims exist. Means request has already been retried before.
+            && $response->getHeader(self::$wwwAuthenticateHeader)
+        ) {
+            if (!is_null($request->content)) {
+                if (!$request->content->isSeekable()) {
+                    return $response;
+                }
+                $request->content->rewind();
+            }
+            $wwwAuthHeader = $response->getHeaderLine(self::$wwwAuthenticateHeader);
+            $matches = [];
+            if (!preg_match(self::$claimsRegex, $wwwAuthHeader, $matches)) {
+                return $response;
+            }
+            $claims = $matches[1];
+            /** @var ResponseInterface $response */
+            $response =  $this->getHttpResponseMessage($request, $claims)->wait();
+        }
+        return $response;
     }
 
     /**
@@ -351,6 +396,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
             $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
             $ex->setResponseStatusCode($response->getStatusCode());
+            $ex->setResponseHeaders($response->getHeaders());
             throw $ex;
         }
         $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
@@ -363,9 +409,13 @@ class GuzzleRequestAdapter implements RequestAdapter
         }
         if ($error && is_subclass_of($error, ApiException::class)) {
             $error->setResponseStatusCode($response->getStatusCode());
+            $error->setResponseHeaders($response->getHeaders());
             throw $error;
         }
-        throw new ApiException("Unsupported error type ". get_debug_type($error));
+        $otherwise = new ApiException("Unsupported error type ". get_debug_type($error));
+        $otherwise->setResponseStatusCode($response->getStatusCode());
+        $otherwise->setResponseHeaders($response->getHeaders());
+        throw $otherwise;
     }
 
     /**
