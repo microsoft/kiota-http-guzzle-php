@@ -17,7 +17,7 @@ run `composer require microsoft/kiota-http-guzzle` or add the following to your 
 ```Shell
 {
     "require": {
-        "microsoft/kiota-http-guzzle": "^0.1.0"
+        "microsoft/kiota-http-guzzle": "^0.9.0"
     }
 }
 ```
