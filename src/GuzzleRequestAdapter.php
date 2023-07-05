@@ -17,6 +17,7 @@ use League\Uri\Contracts\UriException;
 use Microsoft\Kiota\Abstractions\ApiClientBuilder;
 use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
+use Microsoft\Kiota\Abstractions\Enum;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
 use Microsoft\Kiota\Abstractions\RequestInformation;
 use Microsoft\Kiota\Abstractions\Serialization\Parsable;
@@ -183,6 +184,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                     return $result->getBody();
                 }
                 $rootParseNode = $this->getRootParseNode($result);
+                if (is_subclass_of($primitiveType, Enum::class)) {
+                    return $rootParseNode->getEnumValue($primitiveType);
+                }
                 switch ($primitiveType) {
                     case 'int':
                     case 'long':

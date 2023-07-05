@@ -10,6 +10,7 @@ use GuzzleHttp\Psr7\Utils;
 use Http\Promise\FulfilledPromise;
 use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
+use Microsoft\Kiota\Abstractions\Enum;
 use Microsoft\Kiota\Abstractions\RequestInformation;
 use Microsoft\Kiota\Abstractions\ResponseHandler;
 use Microsoft\Kiota\Abstractions\Serialization\Parsable;
@@ -58,6 +59,8 @@ class GuzzleRequestAdapterTest extends TestCase
                         ->willReturn(1);
         $this->parseNode->method('getCollectionOfPrimitiveValues')
                         ->willReturn(['a', 'b', 'c']);
+        $this->parseNode->method('getEnumValue')
+                        ->willReturn($this->createMock(Enum::class));
     }
 
     private function mockParseNodeFactory(): void
@@ -247,6 +250,14 @@ class GuzzleRequestAdapterTest extends TestCase
         $response = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
     }
 
+
+    public function testSendPrimitiveAsyncWithEnum(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
+        $promise = $requestAdapter->sendPrimitiveAsync($this->requestInformation, TestEnum::class);
+        $this->assertInstanceOf(Enum::class, $promise->wait());
+    }
+
 }
 
 class TestUser implements Parsable {
@@ -296,4 +307,10 @@ class TestUser implements Parsable {
     public static function createFromDiscriminatorValue(ParseNode $parseNode): TestUser {
         return new self();
     }
+}
+
+class TestEnum extends Enum
+{
+    const PASS = 'pass';
+    const FAIL = 'fail';
 }
