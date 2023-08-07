@@ -75,9 +75,23 @@ class ParametersNameDecodingHandler
         if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
             return $request;
         }
-        $encodingsToReplace = array_map(function ($character) { return "%".dechex(ord($character)); }, $this->decodingOption->getParametersToDecode());
-        /** @var string $decodedUri */
-        $decodedUri = str_ireplace($encodingsToReplace, $this->decodingOption->getParametersToDecode(), $request->getUri());
+        $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
         return $request->withUri(new Uri($decodedUri));
+    }
+
+    /**
+     * @param string|null $original
+     * @param array<string>|null $charactersToDecode
+     * @return string
+     */
+    public static function decodeUriEncodedString(?string $original = null, ?array $charactersToDecode = null): string
+    {
+        if (empty($original) || empty($charactersToDecode)) {
+            return $original ?? '';
+        }
+        $encodingsToReplace = array_map(function ($character) { return "%".dechex(ord($character)); }, $charactersToDecode);
+        /** @var string $decodedUri */
+        $decodedUri = str_ireplace($encodingsToReplace, $charactersToDecode, $original);
+        return $decodedUri;
     }
 }

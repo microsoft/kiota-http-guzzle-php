@@ -30,7 +30,14 @@ use Microsoft\Kiota\Abstractions\Store\BackingStoreFactory;
 use Microsoft\Kiota\Abstractions\Store\BackingStoreFactorySingleton;
 use Microsoft\Kiota\Abstractions\Types\Date;
 use Microsoft\Kiota\Abstractions\Types\Time;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
+use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
+use Microsoft\Kiota\Http\Middleware\ParametersNameDecodingHandler;
+use OpenTelemetry\API\Globals;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\API\Trace\StatusCode;
+use OpenTelemetry\API\Trace\TracerInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
@@ -54,6 +61,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @var AuthenticationProvider
      */
     private AuthenticationProvider $authenticationProvider;
+    private TracerInterface $tracer;
 
     /**
      * @var ParseNodeFactory|ParseNodeFactoryRegistry
@@ -76,16 +84,21 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param ParseNodeFactory|null $parseNodeFactory
      * @param SerializationWriterFactory|null $serializationWriterFactory
      * @param ClientInterface|null $guzzleClient
+     * @param ObservabilityOption|null $observabilityOption
      */
     public function __construct(AuthenticationProvider $authenticationProvider,
                                 ?ParseNodeFactory $parseNodeFactory = null,
                                 ?SerializationWriterFactory $serializationWriterFactory = null,
-                                ?ClientInterface $guzzleClient = null)
+                                ?ClientInterface $guzzleClient = null,
+                                ?ObservabilityOption $observabilityOption = null
+    )
     {
         $this->authenticationProvider = $authenticationProvider;
         $this->parseNodeFactory = ($parseNodeFactory) ?: ParseNodeFactoryRegistry::getDefaultInstance();
         $this->serializationWriterFactory = ($serializationWriterFactory) ?: SerializationWriterFactoryRegistry::getDefaultInstance();
         $this->guzzleClient = ($guzzleClient) ?: KiotaClientFactory::create();
+        $observabilityOptions = $observabilityOption ?? new ObservabilityOption();
+        $this->tracer = Globals::tracerProvider()->getTracer($observabilityOptions->getTracerInstrumentationName());
     }
 
     /**
@@ -110,21 +123,35 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     public function sendAsync(RequestInformation $requestInfo, array $targetCallable, ?array $errorMappings = null): Promise
     {
-        return $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
+        $span = $this->startTracingSpan($requestInfo, 'sendAsync');
+        $scope = $span->activate();
+        $finalResponse =  $this->getHttpResponseMessage($requestInfo)->then(
+            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
+                    $span->addEvent(self::EventResponseHandlerInvokedKey);
                     return $response;
                 }
-                $this->throwFailedResponse($result, $errorMappings);
+                $this->throwFailedResponse($result, $errorMappings, $span);
                 if ($this->is204NoContentResponse($result)) {
                     return null;
                 }
+                $serializationSpan = $this->tracer->spanBuilder('ParseNode::getObjectValue')
+                    ->addLink($span->getContext())
+                    ->startSpan();
                 $rootNode = $this->getRootParseNode($result);
-                return $rootNode->getObjectValue($targetCallable);
+                $this->setResponseType($targetCallable[0], $serializationSpan);
+                $objectValue = $rootNode->getObjectValue($targetCallable);
+                $serializationSpan->setStatus(StatusCode::STATUS_OK, 'deserialize_success');
+                $span->setStatus(StatusCode::STATUS_OK, 'sendAsync() success');
+                $serializationSpan->end();
+                return $objectValue;
             }
         );
+        $scope->detach();
+        $span->end();
+        return $finalResponse;
     }
 
     /**
@@ -143,25 +170,38 @@ class GuzzleRequestAdapter implements RequestAdapter
         return $this->parseNodeFactory;
     }
 
+    public const EventResponseHandlerInvokedKey = 'com.microsoft.kiota.response_handler_invoked';
     /**
      * @inheritDoc
      */
     public function sendCollectionAsync(RequestInformation $requestInfo, array $targetCallable, ?array $errorMappings = null): Promise
     {
-        return $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings) {
+        $span = self::startTracingSpan($requestInfo, 'sendCollectionAsync');
+        $scope = $span->activate();
+        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
+                    $span->addEvent(self::EventResponseHandlerInvokedKey);
                     return $result;
                 }
-                $this->throwFailedResponse($result, $errorMappings);
+                $this->throwFailedResponse($result, $errorMappings, $span);
                 if ($this->is204NoContentResponse($result)) {
                     return new FulfilledPromise(null);
                 }
-                return $this->getRootParseNode($result)->getCollectionOfObjectValues($targetCallable);
+                $rootNode = $this->getRootParseNode($result);
+                $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
+                    ->addLink($span->getContext())
+                    ->startSpan();
+                $this->setResponseType($targetCallable[0], $spanForDeserialization);
+                $spanForDeserialization->end();
+                return $rootNode->getCollectionOfObjectValues($targetCallable);
             }
         );
+        $scope->detach();
+        $span->end();
+        return $finalResponse;
     }
 
     /**
@@ -169,14 +209,16 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     public function sendPrimitiveAsync(RequestInformation $requestInfo, string $primitiveType, ?array $errorMappings = null): Promise
     {
-        return $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
+        $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveAsync');
+        $scope = $span->activate();
+        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
                     return $result;
                 }
-                $this->throwFailedResponse($result, $errorMappings);
+                $this->throwFailedResponse($result, $errorMappings, $span);
                 if ($this->is204NoContentResponse($result)) {
                     return null;
                 }
@@ -210,6 +252,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                 }
             }
         );
+        $scope->detach();
+        $span->end();
+        return $finalResponse;
     }
 
     /**
@@ -217,20 +262,25 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     public function sendPrimitiveCollectionAsync(RequestInformation $requestInfo, string $primitiveType, ?array $errorMappings = null): Promise
     {
-        return $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings) {
+        $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveCollectionAsync');
+        $scope = $span->activate();
+        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
                     return $result;
                 }
-                $this->throwFailedResponse($result, $errorMappings);
+                $this->throwFailedResponse($result, $errorMappings, $span);
                 if ($this->is204NoContentResponse($result)) {
                     return null;
                 }
                 return $this->getRootParseNode($result)->getCollectionOfPrimitiveValues($primitiveType);
             }
         );
+        $scope->detach();
+        $span->end();
+        return $finalResponse;
     }
 
     /**
@@ -238,17 +288,22 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     public function sendNoContentAsync(RequestInformation $requestInfo, ?array $errorMappings = null): Promise
     {
-        return $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($requestInfo, $errorMappings) {
+        $span = $this->startTracingSpan($requestInfo, 'sendNoContentAsync');
+        $scope = $span->activate();
+        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
                     return $result;
                 }
-                $this->throwFailedResponse($result, $errorMappings);
+                $this->throwFailedResponse($result, $errorMappings, $span);
                 return null;
             }
         );
+        $scope->detach();
+        $span->end();
+        return $finalResponse;
     }
 
     /**
@@ -383,42 +438,66 @@ class GuzzleRequestAdapter implements RequestAdapter
         return $response;
     }
 
+    public const ERROR_BODY_FOUND_ATTRIBUTE_NAME = "com.microsoft.kiota.error.body_found";
+    public const ERROR_MAPPING_FOUND_ATTRIBUTE_NAME = "com.microsoft.kiota.error.mapping_found";
     /**
      * @template T of Parsable
      * @param ResponseInterface $response
      * @param array<string, array{class-string<T>, string}>|null $errorMappings
      * @throws ApiException
      */
-    private function throwFailedResponse(ResponseInterface $response, ?array $errorMappings): void {
+    private function throwFailedResponse(ResponseInterface $response, ?array $errorMappings, SpanInterface $span): void {
         $statusCode = $response->getStatusCode();
         if ($statusCode >= 200 && $statusCode < 400) {
             return;
         }
+
+        $errorSpan = $this->tracer->spanBuilder('throwFailedResponse')
+            ->addLink($span->getContext())
+            ->startSpan();
+        $span->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
+        $scope = $errorSpan->activate();
         $statusCodeAsString = "$statusCode";
         if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
+            $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
             $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
             $ex->setResponseStatusCode($response->getStatusCode());
             $ex->setResponseHeaders($response->getHeaders());
+            $scope->detach();
+            $errorSpan->end();
             throw $ex;
         }
+        $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
         $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
         $rootParseNode = $this->getRootParseNode($response);
         if ($errorClass !== null) {
+            $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
+                ->addLink($span->getContext())
+                ->startSpan();
+            $scope2 = $spanForDeserialization->activate();
             $error = $rootParseNode->getObjectValue($errorClass);
+            $this->setResponseType($errorClass[0], $spanForDeserialization);
+            $scope2->detach();
+            $spanForDeserialization->end();
+
         } else {
             $error = null;
         }
         if ($error && is_subclass_of($error, ApiException::class)) {
             $error->setResponseStatusCode($response->getStatusCode());
             $error->setResponseHeaders($response->getHeaders());
+            $scope->detach();
+            $errorSpan->end();
             throw $error;
         }
         $otherwise = new ApiException("Unsupported error type ". get_debug_type($error));
         $otherwise->setResponseStatusCode($response->getStatusCode());
         $otherwise->setResponseHeaders($response->getHeaders());
+        $scope->detach();
+        $errorSpan->end();
         throw $otherwise;
     }
 
@@ -426,7 +505,31 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param ResponseInterface $response
      * @return bool
      */
-    private function is204NoContentResponse(ResponseInterface $response): bool{
+    private function is204NoContentResponse(ResponseInterface $response): bool
+    {
         return $response->getStatusCode() === 204;
+    }
+    private const QUERY_PARAMETERS_CLEANUP_REGEX = "/\{+?[^}]+}/";
+
+    private function startTracingSpan(RequestInformation $requestInformation, string $methodName): SpanInterface
+    {
+        $parametersToDecode = (new ParametersDecodingOption())->getParametersToDecode();
+        $decodedUriTemplate = ParametersNameDecodingHandler::decodeUriEncodedString($requestInformation->urlTemplate, $parametersToDecode);
+        $telemetryPathValue = empty($decodedUriTemplate)  ? '' : preg_replace(self::QUERY_PARAMETERS_CLEANUP_REGEX, '', $decodedUriTemplate);
+        $span = $this->tracer->spanBuilder("$methodName - $telemetryPathValue")->startSpan();
+        $span->setAttribute("http.uri_template", $decodedUriTemplate);
+        return $span;
+    }
+
+    /**
+     * @param string|null $typeName
+     * @param SpanInterface $span
+     * @return void
+     */
+    private function setResponseType(?string $typeName, SpanInterface $span): void
+    {
+        if ($typeName !== null) {
+            $span->setAttribute('com.microsoft.kiota.response.type', $typeName);
+        }
     }
 }
