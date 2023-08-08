@@ -7,7 +7,7 @@ use Microsoft\Kiota\Abstractions\RequestOption;
 class ObservabilityOption implements RequestOption
 {
     private static string $name = '';
-    public bool $includeEUIIAttributes = false;
+    public bool $includeEUIIAttributes = true;
     public string $tracerInstrumentationName = '';
 
     /**
