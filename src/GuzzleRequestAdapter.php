@@ -130,7 +130,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
-                    $span->addEvent(self::EventResponseHandlerInvokedKey);
+                    $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
                     return $response;
                 }
                 $this->throwFailedResponse($result, $errorMappings, $span);
@@ -170,7 +170,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         return $this->parseNodeFactory;
     }
 
-    public const EventResponseHandlerInvokedKey = 'com.microsoft.kiota.response_handler_invoked';
+    public const EVENT_RESPONSE_HANDLER_INVOKED_KEY = 'com.microsoft.kiota.response_handler_invoked';
     /**
      * @inheritDoc
      */
@@ -183,7 +183,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
                 if ($response !== null) {
-                    $span->addEvent(self::EventResponseHandlerInvokedKey);
+                    $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
                     return $result;
                 }
                 $this->throwFailedResponse($result, $errorMappings, $span);
@@ -451,7 +451,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($statusCode >= 200 && $statusCode < 400) {
             return;
         }
-
+        $responseBodyContents = $response->getBody()->getContents();
         $errorSpan = $this->tracer->spanBuilder('throwFailedResponse')
             ->addLink($span->getContext())
             ->startSpan();
@@ -462,9 +462,10 @@ class GuzzleRequestAdapter implements RequestAdapter
             !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
             !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
             $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
-            $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code " . $statusCode);
+            $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
             $ex->setResponseStatusCode($response->getStatusCode());
             $ex->setResponseHeaders($response->getHeaders());
+            $span->recordException($ex, ['message' => $responseBodyContents, 'know_error' => false]);
             $scope->detach();
             $errorSpan->end();
             throw $ex;
@@ -489,6 +490,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($error && is_subclass_of($error, ApiException::class)) {
             $error->setResponseStatusCode($response->getStatusCode());
             $error->setResponseHeaders($response->getHeaders());
+            $span->recordException($error, ['know_error' => true, 'message' => $responseBodyContents]);
             $scope->detach();
             $errorSpan->end();
             throw $error;
@@ -496,6 +498,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $otherwise = new ApiException("Unsupported error type ". get_debug_type($error));
         $otherwise->setResponseStatusCode($response->getStatusCode());
         $otherwise->setResponseHeaders($response->getHeaders());
+        $span->recordException($otherwise, ['known_error' => false, 'message' => $responseBodyContents]);
         $scope->detach();
         $errorSpan->end();
         throw $otherwise;
@@ -511,13 +514,14 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
     private const QUERY_PARAMETERS_CLEANUP_REGEX = "/\{+?[^}]+}/";
 
-    private function startTracingSpan(RequestInformation $requestInformation, string $methodName): SpanInterface
+    private function startTracingSpan(RequestInformation $requestInfo, string $methodName): SpanInterface
     {
+        $queryReg = self::QUERY_PARAMETERS_CLEANUP_REGEX;
         $parametersToDecode = (new ParametersDecodingOption())->getParametersToDecode();
-        $decodedUriTemplate = ParametersNameDecodingHandler::decodeUriEncodedString($requestInformation->urlTemplate, $parametersToDecode);
-        $telemetryPathValue = empty($decodedUriTemplate)  ? '' : preg_replace(self::QUERY_PARAMETERS_CLEANUP_REGEX, '', $decodedUriTemplate);
+        $decUriTemplate = ParametersNameDecodingHandler::decodeUriEncodedString($requestInfo->urlTemplate, $parametersToDecode);
+        $telemetryPathValue = empty($decUriTemplate) ? '' : preg_replace($queryReg, '', $decUriTemplate);
         $span = $this->tracer->spanBuilder("$methodName - $telemetryPathValue")->startSpan();
-        $span->setAttribute("http.uri_template", $decodedUriTemplate);
+        $span->setAttribute("http.uri_template", $decUriTemplate);
         return $span;
     }
 

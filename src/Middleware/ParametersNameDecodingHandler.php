@@ -89,9 +89,8 @@ class ParametersNameDecodingHandler
         if (empty($original) || empty($charactersToDecode)) {
             return $original ?? '';
         }
-        $encodingsToReplace = array_map(function ($character) { return "%".dechex(ord($character)); }, $charactersToDecode);
-        /** @var string $decodedUri */
-        $decodedUri = str_ireplace($encodingsToReplace, $charactersToDecode, $original);
-        return $decodedUri;
+        $encodingsToReplace = array_map(fn ($character) => "%".dechex(ord($character)), $charactersToDecode);
+        /** @returns string $decodedUri */
+        return str_ireplace($encodingsToReplace, $charactersToDecode, $original);
     }
 }
