@@ -10,9 +10,9 @@
 		"ext-zlib": "*",
 		"ext-json": "*",
         "open-telemetry/sdk": "^1.0.0beta1@beta",
-		"open-telemetry/api":"^1.0.0beta1@beta",
-		"open-telemetry/context":"^1.0.0beta1@beta",
-		"open-telemetry/sem-conv":"^1.0.0beta2@beta"
+		"open-telemetry/api":"@beta",
+		"open-telemetry/context":"@beta",
+		"open-telemetry/sem-conv":"@beta"
 	},
     "require-dev": {
         "phpunit/phpunit": "^9.5",
