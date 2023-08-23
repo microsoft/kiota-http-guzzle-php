@@ -38,10 +38,12 @@ use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use Microsoft\Kiota\Http\Middleware\ParametersNameDecodingHandler;
-use OpenTelemetry\API\Globals;
+use OpenTelemetry\API\Common\Instrumentation\Globals;
+use OpenTelemetry\API\Trace\NoopTracer;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
@@ -102,8 +104,10 @@ class GuzzleRequestAdapter implements RequestAdapter
         $this->parseNodeFactory = ($parseNodeFactory) ?: ParseNodeFactoryRegistry::getDefaultInstance();
         $this->serializationWriterFactory = ($serializationWriterFactory) ?: SerializationWriterFactoryRegistry::getDefaultInstance();
         $this->guzzleClient = ($guzzleClient) ?: KiotaClientFactory::create();
-        $this->observabilityOptions= $observabilityOption ?? new ObservabilityOption();
-        $this->tracer = Globals::tracerProvider()->getTracer($this->observabilityOptions->getTracerInstrumentationName());
+        $this->observabilityOptions= $observabilityOption ?? new ObservabilityOption(true);
+        $this->tracer = $this->observabilityOptions->getEnabled() ?
+            Globals::tracerProvider()->getTracer($this->observabilityOptions->getTracerInstrumentationName())
+            : NoopTracer::getInstance();
     }
 
     /**
@@ -130,38 +134,42 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $this->startTracingSpan($requestInfo, 'sendAsync');
         $scope = $span->activate();
-        $responseMessage =  $this->getHttpResponseMessage($requestInfo);
-        $finalResponse = $responseMessage->then(
-            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
-                $anotherSpan = $this->tracer->spanBuilder('tryHandleResponse')
-                    ->addLink($span->getContext())
-                    ->startSpan();
+        try {
+            $responseMessage = $this->getHttpResponseMessage($requestInfo);
+            $finalResponse   = $responseMessage->then(
+                function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
+                    $anotherSpan = $this->tracer->spanBuilder('tryHandleResponse')
+                        ->setParent(Context::getCurrent())
+                        ->addLink($span->getContext())
+                        ->startSpan();
 
-                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
-                if ($response !== null) {
-                    $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
-                    return $response;
-                }
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    if ($response !== null) {
+                        $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
+                        return $response;
+                    }
 
-                $this->throwFailedResponse($result, $errorMappings, $anotherSpan);
-                $span->setStatus(StatusCode::STATUS_OK, 'response_handle_success');
-                if ($this->is204NoContentResponse($result)) {
-                    return null;
+                    $this->throwFailedResponse($result, $errorMappings, $anotherSpan);
+                    $span->setStatus(StatusCode::STATUS_OK, 'response_handle_success');
+                    if ($this->is204NoContentResponse($result)) {
+                        return null;
+                    }
+                    $serializationSpan = $this->tracer->spanBuilder('ParseNode::getObjectValue')
+                        ->addLink($span->getContext())
+                        ->startSpan();
+                    $rootNode          = $this->getRootParseNode($result);
+                    $this->setResponseType($targetCallable[0], $serializationSpan);
+                    $objectValue = $rootNode->getObjectValue($targetCallable);
+                    $serializationSpan->setStatus(StatusCode::STATUS_OK, 'deserialize_success');
+                    $serializationSpan->end();
+                    return $objectValue;
                 }
-                $serializationSpan = $this->tracer->spanBuilder('ParseNode::getObjectValue')
-                    ->addLink($span->getContext())
-                    ->startSpan();
-                $rootNode = $this->getRootParseNode($result);
-                $this->setResponseType($targetCallable[0], $serializationSpan);
-                $objectValue = $rootNode->getObjectValue($targetCallable);
-                $serializationSpan->setStatus(StatusCode::STATUS_OK, 'deserialize_success');
-                $serializationSpan->end();
-                return $objectValue;
-            }
-        );
-        $span->setStatus(StatusCode::STATUS_OK, 'sendAsync() success');
-        $scope->detach();
-        $span->end();
+            );
+            $span->setStatus(StatusCode::STATUS_OK, 'sendAsync() success');
+        } finally {
+            $scope->detach();
+            $span->end();
+        }
         return $finalResponse;
     }
 
@@ -189,29 +197,32 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = self::startTracingSpan($requestInfo, 'sendCollectionAsync');
         $scope = $span->activate();
-        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
-                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+        try {
+            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+                function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
-                if ($response !== null) {
-                    $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
-                    return $result;
+                    if ($response !== null) {
+                        $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
+                        return $result;
+                    }
+                    $this->throwFailedResponse($result, $errorMappings, $span);
+                    if ($this->is204NoContentResponse($result)) {
+                        return new FulfilledPromise(null);
+                    }
+                    $rootNode               = $this->getRootParseNode($result);
+                    $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
+                        ->addLink($span->getContext())
+                        ->startSpan();
+                    $this->setResponseType($targetCallable[0], $spanForDeserialization);
+                    $spanForDeserialization->end();
+                    return $rootNode->getCollectionOfObjectValues($targetCallable);
                 }
-                $this->throwFailedResponse($result, $errorMappings, $span);
-                if ($this->is204NoContentResponse($result)) {
-                    return new FulfilledPromise(null);
-                }
-                $rootNode = $this->getRootParseNode($result);
-                $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
-                    ->addLink($span->getContext())
-                    ->startSpan();
-                $this->setResponseType($targetCallable[0], $spanForDeserialization);
-                $spanForDeserialization->end();
-                return $rootNode->getCollectionOfObjectValues($targetCallable);
-            }
-        );
-        $scope->detach();
-        $span->end();
+            );
+        } finally {
+            $scope->detach();
+            $span->end();
+        }
         return $finalResponse;
     }
 
@@ -222,49 +233,52 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveAsync');
         $scope = $span->activate();
-        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+        try {
+            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+                function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
-                if ($response !== null) {
-                    return $result;
+                    if ($response !== null) {
+                        return $result;
+                    }
+                    $this->throwFailedResponse($result, $errorMappings, $span);
+                    if ($this->is204NoContentResponse($result)) {
+                        return null;
+                    }
+                    if ($primitiveType === StreamInterface::class) {
+                        return $result->getBody();
+                    }
+                    $rootParseNode = $this->getRootParseNode($result);
+                    if (is_subclass_of($primitiveType, Enum::class)) {
+                        return $rootParseNode->getEnumValue($primitiveType);
+                    }
+                    switch ($primitiveType) {
+                        case 'int':
+                        case 'long':
+                            return $rootParseNode->getIntegerValue();
+                        case 'float':
+                            return $rootParseNode->getFloatValue();
+                        case 'bool':
+                            return $rootParseNode->getBooleanValue();
+                        case 'string':
+                            return $rootParseNode->getStringValue();
+                        case DateTime::class:
+                            return $rootParseNode->getDateTimeValue();
+                        case DateInterval::class:
+                            return $rootParseNode->getDateIntervalValue();
+                        case Date::class:
+                            return $rootParseNode->getDateValue();
+                        case Time::class:
+                            return $rootParseNode->getTimeValue();
+                        default:
+                            throw new InvalidArgumentException("Unsupported primitive type $primitiveType");
+                    }
                 }
-                $this->throwFailedResponse($result, $errorMappings, $span);
-                if ($this->is204NoContentResponse($result)) {
-                    return null;
-                }
-                if ($primitiveType === StreamInterface::class) {
-                    return $result->getBody();
-                }
-                $rootParseNode = $this->getRootParseNode($result);
-                if (is_subclass_of($primitiveType, Enum::class)) {
-                    return $rootParseNode->getEnumValue($primitiveType);
-                }
-                switch ($primitiveType) {
-                    case 'int':
-                    case 'long':
-                        return $rootParseNode->getIntegerValue();
-                    case 'float':
-                        return $rootParseNode->getFloatValue();
-                    case 'bool':
-                        return $rootParseNode->getBooleanValue();
-                    case 'string':
-                        return $rootParseNode->getStringValue();
-                    case DateTime::class:
-                        return $rootParseNode->getDateTimeValue();
-                    case DateInterval::class:
-                        return $rootParseNode->getDateIntervalValue();
-                    case Date::class:
-                        return $rootParseNode->getDateValue();
-                    case Time::class:
-                        return $rootParseNode->getTimeValue();
-                    default:
-                        throw new InvalidArgumentException("Unsupported primitive type $primitiveType");
-                }
-            }
-        );
-        $scope->detach();
-        $span->end();
+            );
+        } finally {
+            $scope->detach();
+            $span->end();
+        }
         return $finalResponse;
     }
 
@@ -275,22 +289,25 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveCollectionAsync');
         $scope = $span->activate();
-        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+        try {
+            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+                function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
-                if ($response !== null) {
-                    return $result;
+                    if ($response !== null) {
+                        return $result;
+                    }
+                    $this->throwFailedResponse($result, $errorMappings, $span);
+                    if ($this->is204NoContentResponse($result)) {
+                        return null;
+                    }
+                    return $this->getRootParseNode($result)->getCollectionOfPrimitiveValues($primitiveType);
                 }
-                $this->throwFailedResponse($result, $errorMappings, $span);
-                if ($this->is204NoContentResponse($result)) {
-                    return null;
-                }
-                return $this->getRootParseNode($result)->getCollectionOfPrimitiveValues($primitiveType);
-            }
-        );
-        $scope->detach();
-        $span->end();
+            );
+        } finally {
+            $scope->detach();
+            $span->end();
+        }
         return $finalResponse;
     }
 
@@ -301,19 +318,22 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $this->startTracingSpan($requestInfo, 'sendNoContentAsync');
         $scope = $span->activate();
-        $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
-            function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
-                $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+        try {
+            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+                function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
 
-                if ($response !== null) {
-                    return $result;
+                    if ($response !== null) {
+                        return $result;
+                    }
+                    $this->throwFailedResponse($result, $errorMappings, $span);
+                    return null;
                 }
-                $this->throwFailedResponse($result, $errorMappings, $span);
-                return null;
-            }
-        );
-        $scope->detach();
-        $span->end();
+            );
+        } finally {
+            $scope->detach();
+            $span->end();
+        }
         return $finalResponse;
     }
 
@@ -359,24 +379,27 @@ class GuzzleRequestAdapter implements RequestAdapter
             ->addLink($span->getContext())
             ->startSpan();
         $scope = $convertorSpan->activate();
-        $requestInformation->pathParameters["baseurl"] = $this->getBaseUrl();
-        $span->setAttribute('http.method', $requestInformation->httpMethod);
-        $span->setAttribute('http.scheme', explode(':',$requestInformation->getUri())[0]);
-        if ($this->observabilityOptions->includeEUIIAttributes) {
-            $span->setAttribute('http.uri', $requestInformation->getUri());
-        }
-        if (!empty($requestInformation->content)) {
-            $span->setAttribute('http.request_content_length', $requestInformation->content->getSize());
-        }
+        try {
+            $requestInformation->pathParameters["baseurl"] = $this->getBaseUrl();
+            $span->setAttribute('http.method', $requestInformation->httpMethod);
+            $span->setAttribute('http.scheme', explode(':', $requestInformation->getUri())[0]);
+            if ($this->observabilityOptions->getIncludeEUIIAttributes()) {
+                $span->setAttribute('http.uri', $requestInformation->getUri());
+            }
+            if (!empty($requestInformation->content)) {
+                $span->setAttribute('http.request_content_length', $requestInformation->content->getSize());
+            }
 
-        $result =  new Request(
-            $requestInformation->httpMethod,
-            $requestInformation->getUri(),
-            $requestInformation->getHeaders()->getAll(),
-            $requestInformation->content
-        );
-        $scope->detach();
-        $convertorSpan->end();
+            $result = new Request(
+                $requestInformation->httpMethod,
+                $requestInformation->getUri(),
+                $requestInformation->getHeaders()->getAll(),
+                $requestInformation->content
+            );
+        } finally {
+            $scope->detach();
+            $convertorSpan->end();
+        }
         return $result;
     }
 
@@ -391,11 +414,13 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $span ?? $this->tracer->spanBuilder('convertToNative')
             ->startSpan();
-        $result = $this->authenticationProvider->authenticateRequest($requestInformation)->then(
-            fn (RequestInformation $authenticatedRequest): RequestInterface =>
-                $this->getPsrRequestFromRequestInformation($authenticatedRequest, $span)
-        );
-        $span->end();
+        try {
+            $result = $this->authenticationProvider->authenticateRequest($requestInformation)->then(
+                fn(RequestInformation $authenticatedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation($authenticatedRequest, $span)
+            );
+        } finally {
+            $span->end();
+        }
         return $result;
     }
 
@@ -426,22 +451,25 @@ class GuzzleRequestAdapter implements RequestAdapter
         $httpResponseSpan = $this->tracer->spanBuilder('getHttpResponseMessage')
             ->startSpan();
         $scope = $httpResponseSpan->activate();
-        $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
-        $additionalAuthContext = $claims ? ['claims' => $claims] : [];
-        $request = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
-        $finalResult = $request->then(
-            function () use ($requestInformation, &$httpResponseSpan) {
-                $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation, $httpResponseSpan);
-                $httpResponseSpan->setStatus(StatusCode::STATUS_OK, 'Request Information Success');
-                return $this->guzzleClient->send($psrRequest, $requestInformation->getRequestOptions());
-            }
-        )->then(
-            function (ResponseInterface $response) use ($requestInformation, $claims, &$httpResponseSpan) {
-                return $this->retryCAEResponseIfRequired($response, $requestInformation, $claims, $httpResponseSpan);
-            }
-        );
-        $scope->detach();
-        $httpResponseSpan->end();
+        try {
+            $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
+            $additionalAuthContext                         = $claims ? ['claims' => $claims] : [];
+            $request                                       = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
+            $finalResult                                   = $request->then(
+                function () use ($requestInformation, &$httpResponseSpan) {
+                    $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation, $httpResponseSpan);
+                    $httpResponseSpan->setStatus(StatusCode::STATUS_OK, 'Request Information Success');
+                    return $this->guzzleClient->send($psrRequest, $requestInformation->getRequestOptions());
+                }
+            )->then(
+                function (ResponseInterface $response) use ($requestInformation, $claims, &$httpResponseSpan) {
+                    return $this->retryCAEResponseIfRequired($response, $requestInformation, $claims, $httpResponseSpan);
+                }
+            );
+        } finally {
+            $scope->detach();
+            $httpResponseSpan->end();
+        }
         return $finalResult;
     }
 
@@ -460,29 +488,32 @@ class GuzzleRequestAdapter implements RequestAdapter
         SpanInterface      $parentSpan
     ): ResponseInterface
     {
-        $span = $this->tracer->spanBuilder('retryCAEResponseIfRequired')
-            ->addLink($parentSpan->getContext())
-            ->startSpan();
         if ($response->getStatusCode() == 401
             && !$claims // fail if previous claims exist. Means request has already been retried before.
             && $response->getHeader(self::$wwwAuthenticateHeader)
         ) {
-            if (!is_null($requestInformation->content)) {
-                if (!$requestInformation->content->isSeekable()) {
+            $span = $this->tracer->spanBuilder('retryCAEResponseIfRequired')
+                ->addLink($parentSpan->getContext())
+                ->startSpan();
+            try {
+                if (!is_null($requestInformation->content)) {
+                    if (!$requestInformation->content->isSeekable()) {
+                        return $response;
+                    }
+                    $requestInformation->content->rewind();
+                }
+                $wwwAuthHeader = $response->getHeaderLine(self::$wwwAuthenticateHeader);
+                $matches       = [];
+                if (!preg_match(self::$claimsRegex, $wwwAuthHeader, $matches)) {
                     return $response;
                 }
-                $requestInformation->content->rewind();
+                $claims = $matches[1];
+                /** @var ResponseInterface $response */
+                $response = $this->getHttpResponseMessage($requestInformation, $claims)->wait();
+            } finally {
+                $span->end();
             }
-            $wwwAuthHeader = $response->getHeaderLine(self::$wwwAuthenticateHeader);
-            $matches = [];
-            if (!preg_match(self::$claimsRegex, $wwwAuthHeader, $matches)) {
-                return $response;
-            }
-            $claims = $matches[1];
-            /** @var ResponseInterface $response */
-            $response =  $this->getHttpResponseMessage($requestInformation, $claims)->wait();
         }
-        $span->end();
         return $response;
     }
 
@@ -497,63 +528,62 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @throws ApiException
      */
     private function throwFailedResponse(ResponseInterface $response, ?array $errorMappings, SpanInterface $span): void {
-        $statusCode = $response->getStatusCode();
-        if ($statusCode >= 200 && $statusCode < 400) {
-            return;
-        }
-        $responseBodyContents = $response->getBody()->getContents();
         $errorSpan = $this->tracer->spanBuilder('throwFailedResponse')
+            ->setParent(Context::getCurrent())
             ->startSpan();
         $scope = $errorSpan->activate();
-        $span->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
-        $statusCodeAsString = "$statusCode";
-        if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
-            !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
-            !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
-            $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
-            $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
-            $ex->setResponseStatusCode($response->getStatusCode());
-            $ex->setResponseHeaders($response->getHeaders());
-            $span->recordException($ex, ['message' => $responseBodyContents, 'know_error' => false]);
+        try {
+            $statusCode = $response->getStatusCode();
+            if ($statusCode >= 200 && $statusCode < 400) {
+                return;
+            }
+            $responseBodyContents = $response->getBody()->getContents();
+
+            $span->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
+            $statusCodeAsString = "$statusCode";
+            if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
+                    !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
+                    !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
+                $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
+                $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
+                $ex->setResponseStatusCode($response->getStatusCode());
+                $ex->setResponseHeaders($response->getHeaders());
+                $span->recordException($ex, ['message' => $responseBodyContents, 'know_error' => false]);
+                throw $ex;
+            }
+            $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, true);
+            $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
+
+            $rootParseNode = $this->getRootParseNode($response);
+            if ($errorClass !== null) {
+                $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
+                    ->addLink($errorSpan->getContext())
+                    ->startSpan();
+                $error                  = $rootParseNode->getObjectValue($errorClass);
+                $this->setResponseType($errorClass[0], $spanForDeserialization);
+                $spanForDeserialization->end();
+
+            } else {
+                $error = null;
+            }
+
+            if ($error && is_subclass_of($error, ApiException::class)) {
+                $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
+                $error->setResponseStatusCode($response->getStatusCode());
+                $error->setResponseHeaders($response->getHeaders());
+                $span->recordException($error, ['know_error' => true, 'message' => $responseBodyContents]);
+                throw $error;
+            }
+            $otherwise = new ApiException("Unsupported error type " . get_debug_type($error));
+            $otherwise->setResponseStatusCode($response->getStatusCode());
+            $otherwise->setResponseHeaders($response->getHeaders());
+            $span->recordException($otherwise, ['known_error' => false, 'message' => $responseBodyContents]);
+            throw $otherwise;
+        } finally {
             $scope->detach();
             $errorSpan->end();
             $span->end();
-            throw $ex;
         }
-        $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, true);
-        $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
-
-        $rootParseNode = $this->getRootParseNode($response);
-        if ($errorClass !== null) {
-            $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
-                ->addLink($errorSpan->getContext())
-                ->startSpan();
-            $error = $rootParseNode->getObjectValue($errorClass);
-            $this->setResponseType($errorClass[0], $spanForDeserialization);
-            $spanForDeserialization->end();
-
-        } else {
-            $error = null;
-        }
-
-        if ($error && is_subclass_of($error, ApiException::class)) {
-            $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
-            $error->setResponseStatusCode($response->getStatusCode());
-            $error->setResponseHeaders($response->getHeaders());
-            $span->recordException($error, ['know_error' => true, 'message' => $responseBodyContents]);
-            $scope->detach();
-            $errorSpan->end();
-            $span->end();
-            throw $error;
-        }
-        $otherwise = new ApiException("Unsupported error type ". get_debug_type($error));
-        $otherwise->setResponseStatusCode($response->getStatusCode());
-        $otherwise->setResponseHeaders($response->getHeaders());
-        $span->recordException($otherwise, ['known_error' => false, 'message' => $responseBodyContents]);
-        $scope->detach();
-        $errorSpan->end();
-        $span->end();
-        throw $otherwise;
     }
 
     /**
@@ -585,7 +615,7 @@ class GuzzleRequestAdapter implements RequestAdapter
     private function setResponseType(?string $typeName, SpanInterface $span): void
     {
         if ($typeName !== null) {
-            $span->setAttribute('com.microsoft.kiota.response.type', $typeName);
+            $span->setAttribute('microsoft.kiota.response.type', $typeName);
         }
     }
 
