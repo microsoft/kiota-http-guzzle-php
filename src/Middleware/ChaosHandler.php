@@ -12,6 +12,9 @@ use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Middleware\Options\ChaosOption;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
+use OpenTelemetry\API\Common\Instrumentation\Globals;
+use OpenTelemetry\API\Trace\TracerInterface;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -28,7 +31,11 @@ use Psr\Http\Message\ResponseInterface;
  */
 class ChaosHandler
 {
+    /** @const string CHAOS_HANDLER_TRIGGERED_EVENT_KEY */
+    private const CHAOS_HANDLER_TRIGGERED_EVENT_KEY = "chaos_handler_triggered";
     public const HANDLER_NAME = 'kiotaChaosHandler';
+
+    private TracerInterface $tracer;
     /**
      * @var callable Next handler in the middleware pipeline
      */
@@ -45,6 +52,7 @@ class ChaosHandler
      */
     public function __construct(callable $nextHandler, ?ChaosOption $chaosOption = null)
     {
+        $this->tracer = Globals::tracerProvider()->getTracer((new ObservabilityOption())->getTracerInstrumentationName());
         $this->nextHandler = $nextHandler;
         $this->chaosOption = ($chaosOption) ?: new ChaosOption();
     }
@@ -56,20 +64,28 @@ class ChaosHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        // Request-level options override global options
-        if (array_key_exists(ChaosOption::class, $options) && $options[ChaosOption::class] instanceof ChaosOption) {
-            $this->chaosOption = $options[ChaosOption::class];
-        }
-
-        $randomPercentage = rand(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
-        if ($randomPercentage <= $this->chaosOption->getChaosPercentage()) {
-            $response = $this->randomChaosResponse($request, $options);
-            if ($response) {
-                return Create::promiseFor($response);
+        $span = $this->tracer->spanBuilder('chaosHandlerSpan')
+            ->startSpan();
+        $scope = $span->activate();
+        try {
+            // Request-level options override global options
+            if (array_key_exists(ChaosOption::class, $options) && $options[ChaosOption::class] instanceof ChaosOption) {
+                $this->chaosOption = $options[ChaosOption::class];
             }
+
+            $randomPercentage = rand(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
+            if ($randomPercentage <= $this->chaosOption->getChaosPercentage()) {
+                $response = $this->randomChaosResponse($request, $options);
+                if ($response) {
+                    return Create::promiseFor($response);
+                }
+            }
+            $fn = $this->nextHandler;
+            return $fn($request, $options);
+        } finally {
+            $scope->detach();
+            $span->end();
         }
-        $fn = $this->nextHandler;
-        return $fn($request, $options);
     }
 
     /**
