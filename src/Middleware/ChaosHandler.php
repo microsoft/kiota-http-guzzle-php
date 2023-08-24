@@ -66,6 +66,7 @@ class ChaosHandler
     {
         $span = $this->tracer->spanBuilder('chaosHandlerSpan')
             ->startSpan();
+        $span->addEvent(self::CHAOS_HANDLER_TRIGGERED_EVENT_KEY);
         $scope = $span->activate();
         try {
             // Request-level options override global options
