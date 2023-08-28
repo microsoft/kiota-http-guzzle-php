@@ -114,9 +114,9 @@ class RetryHandler
                 $retries   = $this->getRetries($request);
                 $span->setAttribute('retryCount', $retries);
                 $delaySecs = $this->calculateDelay($retries, $response);
-                $span->setAttribute('delaySecond', $delaySecs);
+                $span->setAttribute('delaySeconds', $delaySecs);
                 $span->setStatus(StatusCode::STATUS_OK, 'RetryFullFilled');
-                if (!$this->shouldRetry($request, $retries, $delaySecs, $response)
+                if (!$this->shouldRetry($request, $retries, $delaySecs, $response, $span)
                     || $this->exceedRetriesTimeLimit($delaySecs)) {
                     return $response;
                 }
@@ -142,23 +142,36 @@ class RetryHandler
     private function onRejected(RequestInterface $request, array $options, SpanInterface $span): callable
     {
         return function ($reason) use ($request, $options, $span) {
-            $span->setStatus(StatusCode::STATUS_ERROR, 'RejectedRetry');
-            $span->recordException($reason);
-            // No retry for network-related/other exceptions
-            if (!is_a($reason, BadResponseException::class)) {
-                return Create::rejectionFor($reason);
-            }
+            $rejectedSpan = $this->tracer->spanBuilder('onFullFilled')
+                ->addLink($span->getContext())
+                ->setParent(Context::getCurrent())
+                ->startSpan();
+            $scope = $rejectedSpan->activate();
+            try {
+                $span->setStatus(StatusCode::STATUS_ERROR, 'RejectedRetry');
+                $rejectedSpan->recordException($reason);
+                $span->recordException($reason);
+                // No retry for network-related/other exceptions
+                if (!is_a($reason, BadResponseException::class)) {
+                    return Create::rejectionFor($reason);
+                }
 
-            $retries = $this->getRetries($request);
-            $delaySecs = $this->calculateDelay($retries, $reason->getResponse());
-            if (!$this->shouldRetry($request, $retries, $delaySecs, $reason->getResponse())
-                 || $this->exceedRetriesTimeLimit($delaySecs)) {
-                Create::rejectionFor($reason);
+                $retries   = $this->getRetries($request);
+                $span->setAttribute('numberOfRetries', $retries);
+                $delaySecs = $this->calculateDelay($retries, $reason->getResponse());
+                $span->setAttribute('delaySeconds', $delaySecs);
+                if (!$this->shouldRetry($request, $retries, $delaySecs, $reason->getResponse(), $span)
+                    || $this->exceedRetriesTimeLimit($delaySecs)) {
+                    Create::rejectionFor($reason);
+                }
+                $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
+                $request          = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
+                $request->getBody()->rewind();
+                return $this($request, $options);
+            } finally {
+                $scope->detach();
+                $rejectedSpan->end();
             }
-            $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
-            $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
-            $request->getBody()->rewind();
-            return $this($request, $options);
         };
     }
 
@@ -169,15 +182,19 @@ class RetryHandler
      * @param int $retries
      * @param int $delaySecs
      * @param ResponseInterface|null $response
+     * @param SpanInterface $span
      * @return bool
      */
-    private function shouldRetry(RequestInterface $request, int $retries, int $delaySecs, ?ResponseInterface $response): bool
+    private function shouldRetry(RequestInterface $request, int $retries, int $delaySecs, ?ResponseInterface $response, SpanInterface $span): bool
     {
-        return ((($retries < $this->retryOption->getMaxRetries())
+
+        $shouldRetryValue = ((($retries < $this->retryOption->getMaxRetries())
                     && $this->isPayloadRewindable($request)
                     && ($response && $this->retryOption->getShouldRetry()($delaySecs, $retries, $response))
                     && $this->isRetryStatusCode($response->getStatusCode())) || !$response
         );
+        $span->setAttribute('shouldRetry', $shouldRetryValue);
+        return $shouldRetryValue;
     }
 
     /**

@@ -8,13 +8,16 @@
 
 namespace Microsoft\Kiota\Http\Middleware;
 
+use Exception;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Middleware\Options\ChaosOption;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use OpenTelemetry\API\Common\Instrumentation\Globals;
+use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -61,6 +64,7 @@ class ChaosHandler
      * @param RequestInterface $request
      * @param array<string,mixed> $options
      * @return PromiseInterface
+     * @throws Exception
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
@@ -74,9 +78,9 @@ class ChaosHandler
                 $this->chaosOption = $options[ChaosOption::class];
             }
 
-            $randomPercentage = rand(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
+            $randomPercentage = random_int(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
             if ($randomPercentage <= $this->chaosOption->getChaosPercentage()) {
-                $response = $this->randomChaosResponse($request, $options);
+                $response = $this->randomChaosResponse($request, $options, $span);
                 if ($response) {
                     return Create::promiseFor($response);
                 }
@@ -95,113 +99,135 @@ class ChaosHandler
      *
      * @param RequestInterface $request
      * @param array<string, mixed> $options
+     * @param SpanInterface $parentSpan
      * @return ResponseInterface|null
+     * @throws Exception
      */
-    private function randomChaosResponse(RequestInterface $request, array $options): ?ResponseInterface
+    private function randomChaosResponse(RequestInterface $request, array $options, SpanInterface $parentSpan): ?ResponseInterface
     {
-        $chaosResponses = $this->chaosOption->getChaosResponses();
-        if (empty($chaosResponses)) {
-            $chaosResponses = $this->getRandomResponsesByRequestMethod($request->getMethod());
+        $span = $this->tracer->spanBuilder('randomChaosResponse')
+            ->setParent(Context::getCurrent())
+            ->addLink($parentSpan->getContext())
+            ->startSpan();
+        try {
+            $chaosResponses = $this->chaosOption->getChaosResponses();
+            if (empty($chaosResponses)) {
+                $chaosResponses = $this->getRandomResponsesByRequestMethod($request->getMethod(), $span);
+            }
+            if (!$chaosResponses) {
+                return null;
+            }
+            $randomIndex   = random_int(0, sizeof($chaosResponses) - 1);
+            $chaosResponse = $chaosResponses[$randomIndex];
+            return is_callable($chaosResponse) ? $chaosResponse($request, $options) : $chaosResponse;
+        } finally {
+            $span->end();
         }
-        if (!$chaosResponses) {
-            return null;
-        }
-        $randomIndex = rand(0, sizeof($chaosResponses) - 1);
-        $chaosResponse = $chaosResponses[$randomIndex];
-        return is_callable($chaosResponse) ? $chaosResponse($request, $options) : $chaosResponse;
     }
+
+    private const INVALID_HTTP_METHOD_ATTRIBUTE = 'invalidHttpMethodPassedToRandomResponseMethodGenerator';
 
     /**
      * Returns list of possible responses by HTTP request method
      *
      * @param string $httpMethod
+     * @param SpanInterface $parentSpan
      * @return Response[]|null
      */
-    private function getRandomResponsesByRequestMethod(string $httpMethod): ?array
+    private function getRandomResponsesByRequestMethod(string $httpMethod, SpanInterface $parentSpan): ?array
     {
-        $randomResponses = [
-            'GET' => [
-                new Response(200),
-                new Response(301),
-                new Response(307),
-                new Response(400),
-                new Response(401),
-                new Response(403),
-                new Response(404),
-                new Response(405),
-                new Response(429),
-                new Response(500),
-                new Response(502),
-                new Response(503),
-                new Response(504)
-            ],
-            'POST' => [
-                new Response(200),
-                new Response(201),
-                new Response(204),
-                new Response(307),
-                new Response(400),
-                new Response(401),
-                new Response(403),
-                new Response(404),
-                new Response(405),
-                new Response(429),
-                new Response(500),
-                new Response(502),
-                new Response(503),
-                new Response(504),
-                new Response(507)
-            ],
-            'PUT' => [
-                new Response(200),
-                new Response(201),
-                new Response(400),
-                new Response(401),
-                new Response(403),
-                new Response(404),
-                new Response(405),
-                new Response(409),
-                new Response(429),
-                new Response(500),
-                new Response(502),
-                new Response(503),
-                new Response(504),
-                new Response(507)
-            ],
-            'PATCH' => [
-                new Response(200),
-                new Response(204),
-                new Response(400),
-                new Response(401),
-                new Response(403),
-                new Response(404),
-                new Response(405),
-                new Response(429),
-                new Response(500),
-                new Response(502),
-                new Response(503),
-                new Response(504)
-            ],
-            'DELETE' => [
-                new Response(200),
-                new Response(204),
-                new Response(400),
-                new Response(401),
-                new Response(403),
-                new Response(404),
-                new Response(405),
-                new Response(429),
-                new Response(500),
-                new Response(502),
-                new Response(503),
-                new Response(504),
-                new Response(507)
-            ]
-        ];
+        $span = $this->tracer->spanBuilder('randomChaosResponse')
+            ->setParent(Context::getCurrent())
+            ->addLink($parentSpan->getContext())
+            ->startSpan();
+        try {
+            $randomResponses = [
+                'GET'    => [
+                    new Response(200),
+                    new Response(301),
+                    new Response(307),
+                    new Response(400),
+                    new Response(401),
+                    new Response(403),
+                    new Response(404),
+                    new Response(405),
+                    new Response(429),
+                    new Response(500),
+                    new Response(502),
+                    new Response(503),
+                    new Response(504)
+                ],
+                'POST'   => [
+                    new Response(200),
+                    new Response(201),
+                    new Response(204),
+                    new Response(307),
+                    new Response(400),
+                    new Response(401),
+                    new Response(403),
+                    new Response(404),
+                    new Response(405),
+                    new Response(429),
+                    new Response(500),
+                    new Response(502),
+                    new Response(503),
+                    new Response(504),
+                    new Response(507)
+                ],
+                'PUT'    => [
+                    new Response(200),
+                    new Response(201),
+                    new Response(400),
+                    new Response(401),
+                    new Response(403),
+                    new Response(404),
+                    new Response(405),
+                    new Response(409),
+                    new Response(429),
+                    new Response(500),
+                    new Response(502),
+                    new Response(503),
+                    new Response(504),
+                    new Response(507)
+                ],
+                'PATCH'  => [
+                    new Response(200),
+                    new Response(204),
+                    new Response(400),
+                    new Response(401),
+                    new Response(403),
+                    new Response(404),
+                    new Response(405),
+                    new Response(429),
+                    new Response(500),
+                    new Response(502),
+                    new Response(503),
+                    new Response(504)
+                ],
+                'DELETE' => [
+                    new Response(200),
+                    new Response(204),
+                    new Response(400),
+                    new Response(401),
+                    new Response(403),
+                    new Response(404),
+                    new Response(405),
+                    new Response(429),
+                    new Response(500),
+                    new Response(502),
+                    new Response(503),
+                    new Response(504),
+                    new Response(507)
+                ]
+            ];
 
-        if (!array_key_exists(strtoupper($httpMethod), $randomResponses)) {
-            return null;
+            if (!array_key_exists(strtoupper($httpMethod), $randomResponses)) {
+                $span->setAttribute(self::INVALID_HTTP_METHOD_ATTRIBUTE, ['method' => $httpMethod]);
+                return null;
+            }
+            return $randomResponses[strtoupper($httpMethod)];
+        } finally {
+            $span->end();
         }
-        return $randomResponses[strtoupper($httpMethod)];
     }
 }
