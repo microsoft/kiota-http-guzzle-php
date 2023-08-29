@@ -105,9 +105,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $this->serializationWriterFactory = ($serializationWriterFactory) ?: SerializationWriterFactoryRegistry::getDefaultInstance();
         $this->guzzleClient = ($guzzleClient) ?: KiotaClientFactory::create();
         $this->observabilityOptions= $observabilityOption ?? new ObservabilityOption(true);
-        $this->tracer = $this->observabilityOptions->getEnabled() ?
-            Globals::tracerProvider()->getTracer($this->observabilityOptions->getTracerInstrumentationName())
-            : NoopTracer::getInstance();
+        $this->tracer = $this->observabilityOptions->getTracer();
     }
 
     /**

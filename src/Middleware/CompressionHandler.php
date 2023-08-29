@@ -12,6 +12,10 @@ use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\API\Trace\TracerInterface;
+use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 
@@ -36,6 +40,8 @@ class CompressionHandler
      */
     private CompressionOption $compressionOption;
 
+    private TracerInterface $tracer;
+
     /**
      * @var callable(RequestInterface, array<string,mixed>): PromiseInterface
      * Next handler to be called in the middleware pipeline
@@ -47,6 +53,7 @@ class CompressionHandler
      */
     private RequestInterface $originalRequest;
 
+    private const COMPRESSION_HANDLER_ENABLED_KEY = "compression_handler_enabled";
     /**
      * @param callable $nextHandler
      * @param CompressionOption|null $compressionOption
@@ -55,6 +62,7 @@ class CompressionHandler
     {
         $this->nextHandler = $nextHandler;
         $this->compressionOption = ($compressionOption) ?: new CompressionOption();
+        $this->tracer = ObservabilityOption::getTracer();
     }
 
     /**
@@ -64,21 +72,31 @@ class CompressionHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        // Request-level options override global options
-        if (array_key_exists(CompressionOption::class, $options) && $options[CompressionOption::class] instanceof CompressionOption) {
-            $this->compressionOption = $options[CompressionOption::class];
-        }
+        $span = $this->tracer->spanBuilder('compressionHandler')
+            ->startSpan();
 
-        $this->originalRequest = $request; // keep reference in case we have to retry with uncompressed body
-        if (!$this->isRetryAttempt($options)) {
-            $request = $this->compress($request);
-            $options['curl'] = [\CURLOPT_ENCODING => '']; // Allow curl to add the Accept-Encoding header with all the de-compression methods it supports
+        $scope = $span->activate();
+        try {
+            // Request-level options override global options
+            if (array_key_exists(CompressionOption::class, $options) && $options[CompressionOption::class] instanceof CompressionOption) {
+                $span->setAttribute(self::COMPRESSION_HANDLER_ENABLED_KEY, true);
+                $this->compressionOption = $options[CompressionOption::class];
+            }
+
+            $this->originalRequest = $request; // keep reference in case we have to retry with uncompressed body
+            if (!$this->isRetryAttempt($options)) {
+                $request         = $this->compress($request);
+                $options['curl'] = [\CURLOPT_ENCODING => '']; // Allow curl to add the Accept-Encoding header with all the de-compression methods it supports
+            }
+            $fn = $this->nextHandler;
+            return $fn($request, $options)->then(
+                $this->onFulfilled($options, $span),
+                $this->onRejected($options, $span)
+            );
+        } finally {
+            $scope->detach();
+            $span->end();
         }
-        $fn = $this->nextHandler;
-        return $fn($request, $options)->then(
-            $this->onFulfilled($options),
-            $this->onRejected($options)
-        );
     }
 
     /**
@@ -92,20 +110,31 @@ class CompressionHandler
         return (array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options) && $options[self::COMPRESSION_RETRY_ATTEMPT] == 1);
     }
 
+    private const COMPRESSION_RETRY_ATTEMPTS_KEY = 'compression_retry_attempts';
     /**
      * Retries the request if 415 response was received
      *
      * @param array<string, mixed> $options
      * @return callable
      */
-    private function onFulfilled(array $options): callable
+    private function onFulfilled(array $options, SpanInterface $parentSpan): callable
     {
-        return function (ResponseInterface $response) use ($options) {
-            if ($response->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
-                return $this($this->originalRequest, $options);
+        return function (ResponseInterface $response) use ($options, $parentSpan) {
+            $span = $this->tracer->spanBuilder('compressionHandlerOnRejected')
+                ->setParent(Context::getCurrent())
+                ->addLink($parentSpan->getContext())
+                ->startSpan();
+            try {
+                if ($response->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
+                    $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
+                    $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, 1);
+                    return $this($this->originalRequest, $options);
+                }
+                $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, ['retries' => $options[self::COMPRESSION_RETRY_ATTEMPT] ?? 1]);
+                return $response;
+            } finally {
+                $span->end();
             }
-            return $response;
         };
     }
 
@@ -113,19 +142,29 @@ class CompressionHandler
      * Retry only if guzzle BadResponseException was thrown with a 415 status code
      *
      * @param array<string, mixed> $options
+     * @param SpanInterface $parentSpan
      * @return callable
      */
-    private function onRejected(array $options): callable
+    private function onRejected(array $options, SpanInterface $parentSpan): callable
     {
-        return function ($reason) use ($options) {
-            // Only consider 415 BadResponseException in case guzzle http_errors = true
-            if (is_a($reason, BadResponseException::class)) {
-                if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                    $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
-                    return $this($this->originalRequest, $options);
+        return function ($reason) use ($options, $parentSpan) {
+            $span = $this->tracer->spanBuilder('compressionHandlerOnRejected')
+                ->setParent(Context::getCurrent())
+                ->addLink($parentSpan->getContext())
+                ->startSpan();
+            try {
+                // Only consider 415 BadResponseException in case guzzle http_errors = true
+                if (is_a($reason, BadResponseException::class)) {
+                    $span->recordException($reason);
+                    if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
+                        $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
+                        return $this($this->originalRequest, $options);
+                    }
                 }
+                return Create::rejectionFor($reason);
+            } finally {
+                $span->end();
             }
-            return Create::rejectionFor($reason);
         };
     }
 
