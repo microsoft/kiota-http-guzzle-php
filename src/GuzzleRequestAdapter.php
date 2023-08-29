@@ -634,13 +634,4 @@ class GuzzleRequestAdapter implements RequestAdapter
             $span->setAttribute('microsoft.kiota.response.type', $typeName);
         }
     }
-
-    /**
-     * @param TracerInterface $tracer
-     * @return void
-     */
-    public function setTracer(TracerInterface $tracer): void
-    {
-        $this->tracer = $tracer;
-    }
 }
