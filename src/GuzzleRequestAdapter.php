@@ -139,7 +139,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
 
             $responseMessage = $this->getHttpResponseMessage($requestInfo, '', $span);
-            $finalResponse   = $responseMessage->then(
+            $finalResponse = $responseMessage->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
                     $span->setAttribute('http.status_code', $result->getStatusCode());
@@ -155,7 +155,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
-                    $rootNode          = $this->getRootParseNode($result, $span);
+                    $rootNode  = $this->getRootParseNode($result, $span);
                     $this->setResponseType($targetCallable[0], $span);
                     return $rootNode->getObjectValue($targetCallable);
                 }
@@ -205,7 +205,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return new FulfilledPromise(null);
                     }
-                    $rootNode               = $this->getRootParseNode($result, $span);
+                    $rootNode = $this->getRootParseNode($result, $span);
                     $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
                         ->addLink($span->getContext())
                         ->startSpan();
@@ -489,9 +489,9 @@ class GuzzleRequestAdapter implements RequestAdapter
             } catch (Throwable $ex){
                 $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', false);
             }
-            $additionalAuthContext                         = $claims ? ['claims' => $claims] : [];
-            $request                                       = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
-            $finalResult                                   = $request->then(
+            $additionalAuthContext = $claims ? ['claims' => $claims] : [];
+            $request = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
+            $finalResult = $request->then(
                 function () use ($requestInformation, &$httpResponseSpan) {
                     $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation, $httpResponseSpan);
                     $httpResponseSpan->setStatus(StatusCode::STATUS_OK, 'Request Information Success');
@@ -542,7 +542,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $requestInformation->content->rewind();
                 }
                 $wwwAuthHeader = $response->getHeaderLine(self::$wwwAuthenticateHeader);
-                $matches       = [];
+                $matches = [];
                 if (!preg_match(self::$claimsRegex, $wwwAuthHeader, $matches)) {
                     return $response;
                 }
@@ -605,7 +605,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     ->setParent(Context::getCurrent())
                     ->addLink($errorSpan->getContext())
                     ->startSpan();
-                $error                  = $rootParseNode->getObjectValue($errorClass);
+                $error  = $rootParseNode->getObjectValue($errorClass);
                 $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
