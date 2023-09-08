@@ -113,7 +113,10 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param SpanInterface $span
      * @return Promise|null
      */
-    private function tryHandleResponse(RequestInformation $requestInfo, ResponseInterface $result, ?array $errorMappings, SpanInterface $span): ?Promise
+    private function tryHandleResponse(RequestInformation $requestInfo,
+                                       ResponseInterface $result,
+                                       ?array $errorMappings,
+                                       SpanInterface $span): ?Promise
     {
         $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
         if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
@@ -190,7 +193,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
-                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
@@ -227,7 +230,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
@@ -280,14 +283,16 @@ class GuzzleRequestAdapter implements RequestAdapter
     /**
      * @inheritDoc
      */
-    public function sendPrimitiveCollectionAsync(RequestInformation $requestInfo, string $primitiveType, ?array $errorMappings = null): Promise
+    public function sendPrimitiveCollectionAsync(RequestInformation $requestInfo,
+                                                 string $primitiveType,
+                                                 ?array $errorMappings = null): Promise
     {
         $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveCollectionAsync');
         $scope = $span->activate();
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
@@ -317,7 +322,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
-                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
@@ -368,7 +373,8 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @return RequestInterface
      * @throws UriException
      */
-    public function getPsrRequestFromRequestInformation(RequestInformation $requestInformation, ?SpanInterface $span = null): RequestInterface
+    public function getPsrRequestFromRequestInformation(RequestInformation $requestInformation,
+                                                        ?SpanInterface $span = null): RequestInterface
     {
         $span = $span ?? $this->tracer->spanBuilder('getHttpResponseMessage')
             ->startSpan();
@@ -419,7 +425,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         $thisSpan = $thisSpan->startSpan();
         try {
             $result = $this->authenticationProvider->authenticateRequest($requestInformation)->then(
-                fn(RequestInformation $authenticatedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation($authenticatedRequest, $span)
+                fn(RequestInformation $authenticatedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation(
+                    $authenticatedRequest, $span)
             );
         } finally {
             $thisSpan->end();
@@ -464,7 +471,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param SpanInterface|null $span
      * @return Promise
      */
-    private function getHttpResponseMessage(RequestInformation $requestInformation, string $claims = '', ?SpanInterface $span = null): Promise
+    private function getHttpResponseMessage(RequestInformation $requestInformation,
+                                            string $claims = '',
+                                            ?SpanInterface $span = null): Promise
     {
         $httpResponseSpan = $this->tracer->spanBuilder('getHttpResponseMessage');
         if ($span !== null) {
@@ -654,7 +663,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param ResponseInterface $response
      * @return void
      */
-    private function setHttpResponseAtributesInSpan(SpanInterface $span, ResponseInterface $response): void
+    private function setHttpResponseAttributesInSpan(SpanInterface $span, ResponseInterface $response): void
     {
         $span->setAttribute('http.status_code', $response->getStatusCode());
         $span->setAttribute('http.flavor', $response->getProtocolVersion());

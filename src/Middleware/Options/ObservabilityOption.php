@@ -40,7 +40,7 @@ class ObservabilityOption implements RequestOption
         return $this->includeEUIIAttributes;
     }
 
-    public function setTracer(TracerInterface $tracer): void
+    public static function setTracer(TracerInterface $tracer): void
     {
         self::$tracer = $tracer;
     }
