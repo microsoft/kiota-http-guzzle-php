@@ -11,7 +11,10 @@ namespace Microsoft\Kiota\Http\Middleware;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Uri;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 
 /**
@@ -50,6 +53,7 @@ class ParametersNameDecodingHandler
         $this->decodingOption = ($decodingOption) ?: new ParametersDecodingOption();
     }
 
+    private const PARAMETERS_DECODING_HANDLER_ENABLED = 'com.microsoft.kiota.handler.parameters_name_decoding.enable';
     /**
      * @param RequestInterface $request
      * @param array<string, mixed> $options
@@ -57,26 +61,45 @@ class ParametersNameDecodingHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        // Request-level options override global options
-        if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
-            $this->decodingOption = $options[ParametersDecodingOption::class];
+        $span = ObservabilityOption::getTracer()->spanBuilder('ParametersNameDecodingHandler_intercept?')
+            ->startSpan();
+        $scope = $span->activate();
+        try {
+            // Request-level options override global options
+            if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
+                $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
+                $this->decodingOption = $options[ParametersDecodingOption::class];
+            }
+            $request = $this->decodeQueryParameters($request, $span);
+            $fn      = $this->nextHandler;
+            return $fn($request, $options);
+        } finally {
+            $scope->detach();
+            $span->end();
         }
-        $request = $this->decodeQueryParameters($request);
-        $fn = $this->nextHandler;
-        return $fn($request, $options);
     }
 
     /**
      * @param RequestInterface $request
+     * @param SpanInterface $span
      * @return RequestInterface
      */
-    private function decodeQueryParameters(RequestInterface $request): RequestInterface
+    private function decodeQueryParameters(RequestInterface $request, SpanInterface $span): RequestInterface
     {
-        if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
-            return $request;
+        $childSpan = ObservabilityOption::getTracer()->spanBuilder('decodeQueryParameters')
+            ->setParent(Context::getCurrent())
+            ->addLink($span->getContext())
+            ->startSpan();
+        try {
+            if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
+                $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
+                return $request;
+            }
+            $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
+            return $request->withUri(new Uri($decodedUri));
+        } finally {
+            $childSpan->end();
         }
-        $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
-        return $request->withUri(new Uri($decodedUri));
     }
 
     /**

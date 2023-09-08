@@ -65,6 +65,7 @@ class RetryHandler
     }
 
     private const RETRY_HANDLER_INVOKED = "retryHandlerInvoked";
+    private const RETRY_HANDLER_ENABLED_KEY = 'com.microsoft.kiota.handler.retry.enable';
     /**
      * @param RequestInterface $request
      * @param array<string, mixed> $options
@@ -78,6 +79,7 @@ class RetryHandler
         try {
             // Request-level options override global options
             if (array_key_exists(RetryOption::class, $options) && $options[RetryOption::class] instanceof RetryOption) {
+                $span->setAttribute(self::RETRY_HANDLER_ENABLED_KEY, true);
                 $this->retryOption = $options[RetryOption::class];
             }
             $fn = $this->nextHandler;
@@ -157,7 +159,7 @@ class RetryHandler
                 }
 
                 $retries   = $this->getRetries($request);
-                $span->setAttribute('numberOfRetries', $retries);
+                $span->setAttribute('http.retry_count', $retries);
                 $delaySecs = $this->calculateDelay($retries, $reason->getResponse());
                 $span->setAttribute('delaySeconds', $delaySecs);
                 if (!$this->shouldRetry($request, $retries, $delaySecs, $reason->getResponse(), $span)

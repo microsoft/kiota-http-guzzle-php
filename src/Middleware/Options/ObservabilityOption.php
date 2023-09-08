@@ -4,32 +4,27 @@ namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use Microsoft\Kiota\Abstractions\RequestOption;
 use OpenTelemetry\API\Common\Instrumentation\Globals;
-use OpenTelemetry\API\Trace\NoopTracer;
 use OpenTelemetry\API\Trace\TracerInterface;
 
 class ObservabilityOption implements RequestOption
 {
     private bool $includeEUIIAttributes = true;
 
-    private static bool $enabled;
-
     private static TracerInterface $tracer;
 
     /**
-     * @param bool $enabled
      */
-    public function __construct(bool $enabled = false)
+    public function __construct()
     {
-        self::$tracer = $enabled ? Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName()): NoopTracer::getInstance();
-        self::$enabled = $enabled;
+        self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName());
     }
 
     /**
      * @return string
      */
-    public function getTracerInstrumentationName(): string
+    public static function getTracerInstrumentationName(): string
     {
-        return "microsoft/kiota-http-guzzle-php";
+        return "microsoft.kiota.http:kiota-http-guzzle-php";
     }
 
     /**
@@ -45,26 +40,8 @@ class ObservabilityOption implements RequestOption
         return $this->includeEUIIAttributes;
     }
 
-    /**
-     * @return bool
-     */
-    public function getEnabled(): bool
-    {
-        return self::$enabled;
-    }
-
-    /**
-     * @param bool $enabled
-     */
-    public function setEnabled(bool $enabled): void
-    {
-        self::$tracer = $enabled ? Globals::tracerProvider()->getTracer($this->getTracerInstrumentationName()) : NoopTracer::getInstance();
-        self::$enabled = $enabled;
-    }
-
     public function setTracer(TracerInterface $tracer): void
     {
-        if (!self::$enabled && self::$tracer instanceof NoopTracer) return;
         self::$tracer = $tracer;
     }
 

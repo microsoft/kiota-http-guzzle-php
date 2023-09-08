@@ -38,8 +38,6 @@ use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use Microsoft\Kiota\Http\Middleware\ParametersNameDecodingHandler;
-use OpenTelemetry\API\Common\Instrumentation\Globals;
-use OpenTelemetry\API\Trace\NoopTracer;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\API\Trace\TracerInterface;
@@ -104,7 +102,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $this->parseNodeFactory = ($parseNodeFactory) ?: ParseNodeFactoryRegistry::getDefaultInstance();
         $this->serializationWriterFactory = ($serializationWriterFactory) ?: SerializationWriterFactoryRegistry::getDefaultInstance();
         $this->guzzleClient = ($guzzleClient) ?: KiotaClientFactory::create();
-        $this->observabilityOptions= $observabilityOption ?? new ObservabilityOption(true);
+        $this->observabilityOptions= $observabilityOption ?? new ObservabilityOption();
         $this->tracer = $this->observabilityOptions->getTracer();
     }
 
@@ -112,13 +110,15 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param RequestInformation $requestInfo
      * @param ResponseInterface $result
      * @param array<string,array{string,string}>|null $errorMappings
+     * @param SpanInterface $span
      * @return Promise|null
      */
-    private function tryHandleResponse(RequestInformation $requestInfo, ResponseInterface $result, ?array $errorMappings = null): ?Promise
+    private function tryHandleResponse(RequestInformation $requestInfo, ResponseInterface $result, ?array $errorMappings, SpanInterface $span): ?Promise
     {
         $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
         if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
             $responseHandler = $responseHandlerOption->getResponseHandler();
+            $span->addEvent('Event - com.microsoft.kiota.response_handler_invoked?');
             /** @phpstan-ignore-next-line False alarm?*/
             return $responseHandler->handleResponseAsync($result, $errorMappings);
         }
@@ -132,13 +132,15 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $span = $this->startTracingSpan($requestInfo, 'sendAsync');
         $scope = $span->activate();
-        $currentContext = $span->storeInContext(Context::getCurrent());
         try {
 
             $responseMessage = $this->getHttpResponseMessage($requestInfo, '', $span);
             $finalResponse   = $responseMessage->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
+                    $span->setAttribute('http.status_code', $result->getStatusCode());
+                    $span->setAttribute('http.flavor', $result->getProtocolVersion());
+                    $span->setAttribute('http.response_content_type', $result->getHeaderLine('Content-Type'));
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
                         return $response;
@@ -189,7 +191,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
@@ -225,12 +228,14 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
                         return $result;
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
+                    $this->setResponseType($primitiveType, $span);
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
@@ -260,7 +265,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         case Time::class:
                             return $rootParseNode->getTimeValue();
                         default:
-                            throw new InvalidArgumentException("Unsupported primitive type $primitiveType");
+                            $ex = new InvalidArgumentException("Unsupported primitive type $primitiveType");
+                            $span->recordException($ex);
+                            throw $ex;
                     }
                 }
             );
@@ -281,7 +288,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
                         return $result;
@@ -310,7 +318,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         try {
             $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
                 function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings);
+                    $this->setHttpResponseAtributesInSpan($span, $result);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
                         return $result;
@@ -378,7 +387,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $span->setAttribute('http.uri', $requestInformation->getUri());
             }
             if (!empty($requestInformation->content)) {
-                $span->setAttribute('http.request_content_length', $requestInformation->content->getSize());
+                $span->setAttribute('http.request_content_length?', $requestInformation->content->getSize());
             }
 
             $result = new Request(
@@ -509,6 +518,8 @@ class GuzzleRequestAdapter implements RequestAdapter
                 ->setParent(Context::getCurrent())
                 ->addLink($parentSpan->getContext())
                 ->startSpan();
+
+            $span->addEvent('Event - com.microsoft.kiota.authenticate_challenge_received?');
             try {
                 if (!is_null($requestInformation->content)) {
                     if (!$requestInformation->content->isSeekable()) {
@@ -547,7 +558,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($statusCode >= 200 && $statusCode < 400) {
             return;
         }
-        $errorSpan = $this->tracer->spanBuilder('throwFailedResponse')
+        $errorSpan = $this->tracer->spanBuilder('throwFailedResponses')
             ->setParent($currentContext)
             ->startSpan();
         $scope = $errorSpan->activate();
@@ -555,6 +566,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $responseBodyContents = $response->getBody()->getContents();
 
             $errorSpan->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
+            $span->setAttribute('status_message', 'received_error_response');
             $statusCodeAsString = "$statusCode";
             if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
                     !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
@@ -620,7 +632,21 @@ class GuzzleRequestAdapter implements RequestAdapter
         $telemetryPathValue = empty($decUriTemplate) ? '' : preg_replace($queryReg, '', $decUriTemplate);
         $span = $this->tracer->spanBuilder("$methodName - $telemetryPathValue")->startSpan();
         $span->setAttribute("http.uri_template", $decUriTemplate);
+        $span->setAttribute('http.method', $requestInfo->httpMethod);
+        $span->setAttribute('http.request_content_type?', $requestInfo->getHeaders()->get(RequestInformation::$contentTypeHeader));
         return $span;
+    }
+
+    /**
+     * @param SpanInterface $span
+     * @param ResponseInterface $response
+     * @return void
+     */
+    private function setHttpResponseAtributesInSpan(SpanInterface $span, ResponseInterface $response): void
+    {
+        $span->setAttribute('http.status_code', $response->getStatusCode());
+        $span->setAttribute('http.flavor', $response->getProtocolVersion());
+        $span->setAttribute('http.response_content_type?', $response->getHeaderLine('Content-Type'));
     }
 
     /**

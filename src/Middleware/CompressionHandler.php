@@ -53,7 +53,7 @@ class CompressionHandler
      */
     private RequestInterface $originalRequest;
 
-    private const COMPRESSION_HANDLER_ENABLED_KEY = "compression_handler_enabled";
+    private const COMPRESSION_HANDLER_ENABLED_KEY = "com.microsoft.kiota.handler.compression.enable";
     /**
      * @param callable $nextHandler
      * @param CompressionOption|null $compressionOption
@@ -111,10 +111,12 @@ class CompressionHandler
     }
 
     private const COMPRESSION_RETRY_ATTEMPTS_KEY = 'compression_retry_attempts';
+
     /**
      * Retries the request if 415 response was received
      *
      * @param array<string, mixed> $options
+     * @param SpanInterface $parentSpan
      * @return callable
      */
     private function onFulfilled(array $options, SpanInterface $parentSpan): callable
