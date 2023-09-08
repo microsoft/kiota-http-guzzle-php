@@ -383,7 +383,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $requestInformation->pathParameters["baseurl"] = $this->getBaseUrl();
             $span->setAttribute('http.method', $requestInformation->httpMethod);
             $span->setAttribute('http.scheme', explode(':', $requestInformation->getUri())[0]);
-            if ($this->observabilityOptions->getIncludeEUIIAttributes()) {
+            if ($this->getObservabilityOptionsFromRequest($requestInformation)->getIncludeEUIIAttributes()) {
                 $span->setAttribute('http.uri', $requestInformation->getUri());
             }
             if (!empty($requestInformation->content)) {
@@ -570,9 +570,12 @@ class GuzzleRequestAdapter implements RequestAdapter
             ->setParent($currentContext)
             ->startSpan();
         $scope = $errorSpan->activate();
+        $errorSpan->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
         try {
             $responseBodyContents = $response->getBody()->getContents();
-
+            if (empty($responseBodyContents)) {
+                $errorSpan->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
+            }
             $errorSpan->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
             $errorSpan->setAttribute('status_message', 'received_error_response');
             $errorSpan->setAttribute('status', 'error');
@@ -580,7 +583,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
                     !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
                     !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
-                $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
+                $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, false);
                 $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
                 $ex->setResponseStatusCode($response->getStatusCode());
                 $ex->setResponseHeaders($response->getHeaders());
@@ -597,6 +600,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     ->addLink($errorSpan->getContext())
                     ->startSpan();
                 $error                  = $rootParseNode->getObjectValue($errorClass);
+                $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
 
@@ -668,5 +672,18 @@ class GuzzleRequestAdapter implements RequestAdapter
         if ($typeName !== null) {
             $span->setAttribute('microsoft.kiota.response.type', $typeName);
         }
+    }
+
+    /**
+     * @param RequestInformation $info
+     * @return ObservabilityOption
+     */
+    private function getObservabilityOptionsFromRequest(RequestInformation $info): ObservabilityOption
+    {
+        $option = $info->getRequestOptions()[ObservabilityOption::class] ?? null;
+        if ($option instanceof ObservabilityOption) {
+            return $option;
+        }
+        return $this->observabilityOptions;
     }
 }
