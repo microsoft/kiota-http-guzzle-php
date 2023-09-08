@@ -412,26 +412,19 @@ class GuzzleRequestAdapter implements RequestAdapter
     /**
      * Converts RequestInformation object to an authenticated(containing auth header) PSR-7 Request Object.
      *
-     * @param RequestInformation $requestInformation
-     * @param SpanInterface|null $span
+     * @param RequestInformation $requestInformationInformation
      * @return Promise
      */
-    public function convertToNative(RequestInformation $requestInformation, ?SpanInterface $span = null): Promise
+    public function convertToNative(RequestInformation $requestInformationInformation): Promise
     {
-        $currentContext = Context::getCurrent();
-        $thisSpan = $this->tracer->spanBuilder('convertToNative');
-        if ($span !== null) {
-            $thisSpan = $thisSpan->setParent($span->storeInContext($currentContext));
-        }
-        $thisSpan = $thisSpan->startSpan();
+        $span = $this->tracer->spanBuilder('convertToNative')->startSpan();
         try {
-            $result = $this->authenticationProvider->authenticateRequest($requestInformation)->then(
-                fn(RequestInformation $authenticatedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation(
-                    $authenticatedRequest, $span)
+            $result = $this->authenticationProvider->authenticateRequest($requestInformationInformation)->then(
+                fn(RequestInformation $authedRequest): RequestInterface => $this->getPsrRequestFromRequestInformation(
+                    $authedRequest, $span)
             );
         } finally {
-            $thisSpan->end();
-            if ($span !== null) $span->end();
+            $span->end();
         }
         return $result;
     }
