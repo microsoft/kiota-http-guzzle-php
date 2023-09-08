@@ -156,7 +156,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                     return $rootNode->getObjectValue($targetCallable);
                 }
             );
-            $span->setStatus(StatusCode::STATUS_OK, 'sendAsync() success');
         } finally {
             $scope->detach();
             $span->end();
