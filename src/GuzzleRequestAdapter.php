@@ -380,11 +380,13 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = $span ?? $this->tracer->spanBuilder('getHttpResponseMessage')
             ->startSpan();
         $currentContext = Context::getCurrent();
-        $convertorSpan = $this->tracer->spanBuilder('getPsrRequestFromRequestInformation')
-            ->setParent($currentContext)
-            ->addLink($span->getContext())
+        $psrRequestFromInfoSpan = $this->tracer->spanBuilder('getPsrRequestFromRequestInformation');
+        if ($span !== null) {
+            $psrRequestFromInfoSpan = $psrRequestFromInfoSpan->setParent($currentContext);
+        }
+        $psrRequestFromInfoSpan = $psrRequestFromInfoSpan->addLink($span->getContext())
             ->startSpan();
-        $scope = $convertorSpan->activate();
+        $scope = $psrRequestFromInfoSpan->activate();
         try {
             $requestInformation->pathParameters["baseurl"] = $this->getBaseUrl();
             $span->setAttribute('http.method', $requestInformation->httpMethod);
@@ -404,7 +406,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             );
         } finally {
             $scope->detach();
-            $convertorSpan->end();
+            $psrRequestFromInfoSpan->end();
         }
         return $result;
     }
@@ -438,10 +440,10 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ParseNode
     {
-        $serializationSpan = $this->tracer->spanBuilder('ParseNode::getObjectValue')
+        $rootParseNodeSpan = $this->tracer->spanBuilder('getRootParseNode')
             ->addLink($span->getContext())
             ->startSpan();
-        $scope = $serializationSpan->activate();
+        $scope = $rootParseNodeSpan->activate();
         try {
             if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
                 throw new RuntimeException("No response content type header for deserialization");
@@ -449,11 +451,11 @@ class GuzzleRequestAdapter implements RequestAdapter
             $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
 
             $result = $this->parseNodeFactory->getRootParseNode($contentType[0], $response->getBody());
-            $serializationSpan->setStatus(StatusCode::STATUS_OK, 'deserialize_success');
+            $rootParseNodeSpan->setStatus(StatusCode::STATUS_OK, 'deserialize_success');
             return $result;
         } finally {
             $scope->detach();
-            $serializationSpan->end();
+            $rootParseNodeSpan->end();
         }
     }
 
