@@ -8,8 +8,7 @@
 		"microsoft/kiota-abstractions": "^0.7.0 || ^0.8.0",
 		"ext-zlib": "*",
 		"ext-json": "*",
-        "open-telemetry/sdk": "^0.0.17",
-		"open-telemetry/api": "^0.0.17"
+        "open-telemetry/sdk": "^0.0.17"
 	},
     "require-dev": {
         "phpunit/phpunit": "^9.5",
