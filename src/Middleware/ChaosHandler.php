@@ -14,7 +14,6 @@ use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Middleware\Options\ChaosOption;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
-use OpenTelemetry\API\Common\Instrumentation\Globals;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\TracerInterface;
 use OpenTelemetry\Context\Context;
