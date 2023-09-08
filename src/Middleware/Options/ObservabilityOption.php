@@ -52,7 +52,8 @@ class ObservabilityOption implements RequestOption
     public static function getTracer(): TracerInterface
     {
         if (self::$tracer === null) {
-            self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName(), Constants::KIOTA_HTTP_CLIENT_VERSION);
+            self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName(),
+                Constants::KIOTA_HTTP_CLIENT_VERSION);
         }
         return self::$tracer;
     }
