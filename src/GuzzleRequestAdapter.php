@@ -469,12 +469,20 @@ class GuzzleRequestAdapter implements RequestAdapter
     {
         $httpResponseSpan = $this->tracer->spanBuilder('getHttpResponseMessage');
         if ($span !== null) {
+            $span->setAttribute('com.microsoft.kiota.authentication.additional_claims_provided', empty(trim($claims)));
             $httpResponseSpan = $httpResponseSpan->addLink($span->getContext())->setParent($span->storeInContext(Context::getCurrent()));
         }
         $httpResponseSpan = $httpResponseSpan->startSpan();
         $scope = $httpResponseSpan->activate();
         try {
             $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
+            if ($span !== null)
+                try {
+                    $requestInformation->getUri();
+                    $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', true);
+                } catch (\Throwable $ex){
+                    $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', false);
+                }
             $additionalAuthContext                         = $claims ? ['claims' => $claims] : [];
             $request                                       = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
             $finalResult                                   = $request->then(
