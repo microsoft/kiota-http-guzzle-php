@@ -55,7 +55,7 @@ class ChaosHandler
      */
     public function __construct(callable $nextHandler, ?ChaosOption $chaosOption = null)
     {
-        $this->tracer = Globals::tracerProvider()->getTracer((new ObservabilityOption())->getTracerInstrumentationName());
+        $this->tracer = ObservabilityOption::getTracer();
         $this->nextHandler = $nextHandler;
         $this->chaosOption = ($chaosOption) ?: new ChaosOption();
     }

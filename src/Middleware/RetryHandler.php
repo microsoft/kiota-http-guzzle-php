@@ -13,6 +13,7 @@ use DateTimeInterface;
 use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use OpenTelemetry\API\Common\Instrumentation\Globals;
 use OpenTelemetry\API\Trace\SpanInterface;
@@ -60,7 +61,7 @@ class RetryHandler
     public function __construct(callable $nextHandler, ?RetryOption $retryOption = null)
     {
         $this->retryOption = ($retryOption) ?: new RetryOption();
-        $this->tracer = Globals::tracerProvider()->getTracer('oppo');
+        $this->tracer = ObservabilityOption::getTracer();
         $this->nextHandler = $nextHandler;
     }
 
