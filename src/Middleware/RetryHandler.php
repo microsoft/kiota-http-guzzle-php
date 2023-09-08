@@ -114,7 +114,7 @@ class RetryHandler
                 if (!$response) {
                     return $response;
                 }
-                $retries   = $this->getRetries($request);
+                $retries = $this->getRetries($request);
                 $span->setAttribute('retryCount', $retries);
                 $delaySecs = $this->calculateDelay($retries, $response);
                 $span->setAttribute('delaySeconds', $delaySecs);
@@ -124,7 +124,7 @@ class RetryHandler
                     return $response;
                 }
                 $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
-                $request          = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
+                $request      = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
                 $request->getBody()->rewind();
                 return $this($request, $options);
             } finally {
@@ -159,7 +159,7 @@ class RetryHandler
                     return Create::rejectionFor($reason);
                 }
 
-                $retries   = $this->getRetries($request);
+                $retries = $this->getRetries($request);
                 $span->setAttribute('http.retry_count', $retries);
                 $delaySecs = $this->calculateDelay($retries, $reason->getResponse());
                 $span->setAttribute('delaySeconds', $delaySecs);
@@ -168,7 +168,7 @@ class RetryHandler
                     Create::rejectionFor($reason);
                 }
                 $options['delay'] = $delaySecs * 1000; // Guzzle sleeps the thread before executing request
-                $request          = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
+                $request = $request->withHeader(self::RETRY_ATTEMPT_HEADER, (string)($retries + 1));
                 $request->getBody()->rewind();
                 return $this($request, $options);
             } finally {
@@ -233,7 +233,7 @@ class RetryHandler
             return ($this->retryOption->getDelay() > $retryAfterSeconds) ? $this->retryOption->getDelay() : $retryAfterSeconds;
         }
 
-        $retries ++;
+        $retries++;
         $expoDelay = self::exponentialDelay($retries, $this->retryOption->getDelay());
         return ($expoDelay > $retryAfterSeconds) ? $expoDelay : $retryAfterSeconds;
     }

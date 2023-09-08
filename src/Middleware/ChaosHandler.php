@@ -119,7 +119,7 @@ class ChaosHandler
             if (!$chaosResponses) {
                 return null;
             }
-            $randomIndex   = random_int(0, sizeof($chaosResponses) - 1);
+            $randomIndex = random_int(0, sizeof($chaosResponses) - 1);
             $chaosResponse = $chaosResponses[$randomIndex];
             return is_callable($chaosResponse) ? $chaosResponse($request, $options) : $chaosResponse;
         } finally {

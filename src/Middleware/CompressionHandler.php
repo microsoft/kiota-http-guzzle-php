@@ -85,7 +85,7 @@ class CompressionHandler
 
             $this->originalRequest = $request; // keep reference in case we have to retry with uncompressed body
             if (!$this->isRetryAttempt($options)) {
-                $request         = $this->compress($request);
+                $request = $this->compress($request);
                 $options['curl'] = [\CURLOPT_ENCODING => '']; // Allow curl to add the Accept-Encoding header with all the de-compression methods it supports
             }
             $fn = $this->nextHandler;

@@ -71,7 +71,7 @@ class ParametersNameDecodingHandler
                 $this->decodingOption = $options[ParametersDecodingOption::class];
             }
             $request = $this->decodeQueryParameters($request, $span);
-            $fn      = $this->nextHandler;
+            $fn  = $this->nextHandler;
             return $fn($request, $options);
         } finally {
             $scope->detach();

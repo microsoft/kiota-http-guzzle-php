@@ -155,7 +155,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
-                    $rootNode  = $this->getRootParseNode($result, $span);
+                    $rootNode = $this->getRootParseNode($result, $span);
                     $this->setResponseType($targetCallable[0], $span);
                     return $rootNode->getObjectValue($targetCallable);
                 }
@@ -605,7 +605,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     ->setParent(Context::getCurrent())
                     ->addLink($errorSpan->getContext())
                     ->startSpan();
-                $error  = $rootParseNode->getObjectValue($errorClass);
+                $error = $rootParseNode->getObjectValue($errorClass);
                 $span->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
