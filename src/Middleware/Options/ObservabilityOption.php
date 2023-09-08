@@ -3,6 +3,7 @@
 namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use Microsoft\Kiota\Abstractions\RequestOption;
+use Microsoft\Kiota\Http\Constants;
 use OpenTelemetry\API\Common\Instrumentation\Globals;
 use OpenTelemetry\API\Trace\TracerInterface;
 
@@ -10,13 +11,13 @@ class ObservabilityOption implements RequestOption
 {
     private bool $includeEUIIAttributes = true;
 
-    private static TracerInterface $tracer;
+    private static ?TracerInterface $tracer = null;
 
     /**
      */
     public function __construct()
     {
-        self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName());
+        self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName(), Constants::KIOTA_HTTP_CLIENT_VERSION);
     }
 
     /**
@@ -50,6 +51,9 @@ class ObservabilityOption implements RequestOption
      */
     public static function getTracer(): TracerInterface
     {
+        if (self::$tracer === null) {
+            self::$tracer = Globals::tracerProvider()->getTracer(self::getTracerInstrumentationName(), Constants::KIOTA_HTTP_CLIENT_VERSION);
+        }
         return self::$tracer;
     }
 }
