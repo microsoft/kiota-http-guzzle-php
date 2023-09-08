@@ -460,39 +460,41 @@ class GuzzleRequestAdapter implements RequestAdapter
     /**
      * Authenticates and executes the request
      *
-     * @param RequestInformation $requestInformation
+     * @param RequestInformation $requestInfo
      * @param string $claims additional claims to request if CAE fails
      * @param SpanInterface $span
      * @return Promise
      */
-    private function getHttpResponseMessage(RequestInformation $requestInformation,
+    private function getHttpResponseMessage(RequestInformation $requestInfo,
                                             string $claims,
                                             SpanInterface $span): Promise
     {
         $httpResponseSpan = $this->tracer->spanBuilder('getHttpResponseMessage');
         $span->setAttribute('com.microsoft.kiota.authentication.additional_claims_provided', empty(trim($claims)));
-        $httpResponseSpan = $httpResponseSpan->addLink($span->getContext())->setParent($span->storeInContext(Context::getCurrent()));
+        $httpResponseSpan = $httpResponseSpan
+            ->addLink($span->getContext())
+            ->setParent($span->storeInContext(Context::getCurrent()));
         $httpResponseSpan = $httpResponseSpan->startSpan();
         $scope = $httpResponseSpan->activate();
         try {
-            $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
+            $requestInfo->pathParameters['baseurl'] = $this->getBaseUrl();
             try {
-                $requestInformation->getUri();
+                $requestInfo->getUri();
                 $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', true);
             } catch (Throwable $ex){
                 $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', false);
             }
             $additionalAuthContext = $claims ? ['claims' => $claims] : [];
-            $request = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
+            $request = $this->authenticationProvider->authenticateRequest($requestInfo, $additionalAuthContext);
             $finalResult = $request->then(
-                function () use ($requestInformation, &$httpResponseSpan) {
-                    $psrRequest = $this->getPsrRequestFromRequestInformation($requestInformation, $httpResponseSpan);
+                function () use ($requestInfo, &$httpResponseSpan) {
+                    $psrRequest = $this->getPsrRequestFromRequestInformation($requestInfo, $httpResponseSpan);
                     $httpResponseSpan->setStatus(StatusCode::STATUS_OK, 'Request Information Success');
-                    return $this->guzzleClient->send($psrRequest, $requestInformation->getRequestOptions());
+                    return $this->guzzleClient->send($psrRequest, $requestInfo->getRequestOptions());
                 }
             )->then(
-                function (ResponseInterface $response) use ($requestInformation, $claims, &$httpResponseSpan) {
-                    return $this->retryCAEResponseIfRequired($response, $requestInformation, $claims, $httpResponseSpan);
+                function (ResponseInterface $response) use ($requestInfo, $claims, &$httpResponseSpan) {
+                    return $this->retryCAEResponseIfRequired($response, $requestInfo, $claims, $httpResponseSpan);
                 }
             );
         } finally {
