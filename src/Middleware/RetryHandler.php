@@ -153,7 +153,6 @@ class RetryHandler
             try {
                 $rejectedSpan->setStatus(StatusCode::STATUS_ERROR, 'RejectedRetry');
                 $rejectedSpan->recordException($reason);
-                $rejectedSpan->recordException($reason);
                 // No retry for network-related/other exceptions
                 if (!is_a($reason, BadResponseException::class)) {
                     return Create::rejectionFor($reason);
