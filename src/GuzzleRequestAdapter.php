@@ -142,9 +142,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $finalResponse = $responseMessage->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
-                    $span->setAttribute('http.status_code', $result->getStatusCode());
-                    $span->setAttribute('http.flavor', $result->getProtocolVersion());
-                    $span->setAttribute('http.response_content_type', $result->getHeaderLine('Content-Type'));
+                    $this->setHttpResponseAttributesInSpan($span, $result);
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
                         return $response;
