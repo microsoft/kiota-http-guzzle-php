@@ -78,9 +78,9 @@ class RetryHandler
         $span->addEvent(self::RETRY_HANDLER_INVOKED);
         $scope = $span->activate();
         try {
+            $span->setAttribute(self::RETRY_HANDLER_ENABLED_KEY, true);
             // Request-level options override global options
             if (array_key_exists(RetryOption::class, $options) && $options[RetryOption::class] instanceof RetryOption) {
-                $span->setAttribute(self::RETRY_HANDLER_ENABLED_KEY, true);
                 $this->retryOption = $options[RetryOption::class];
             }
             $fn = $this->nextHandler;

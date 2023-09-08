@@ -65,9 +65,9 @@ class ParametersNameDecodingHandler
             ->startSpan();
         $scope = $span->activate();
         try {
+            $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
             // Request-level options override global options
             if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
-                $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
                 $this->decodingOption = $options[ParametersDecodingOption::class];
             }
             $request = $this->decodeQueryParameters($request, $span);

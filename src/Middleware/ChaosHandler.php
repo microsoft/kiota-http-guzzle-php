@@ -36,6 +36,7 @@ class ChaosHandler
 {
     /** @const string CHAOS_HANDLER_TRIGGERED_EVENT_KEY */
     private const CHAOS_HANDLER_TRIGGERED_EVENT_KEY = "chaos_handler_triggered";
+    private const CHAOS_HANDLER_ENABLED_KEY = 'com.microsoft.kiota.handler.chaos.enable';
     public const HANDLER_NAME = 'kiotaChaosHandler';
 
     private TracerInterface $tracer;
@@ -73,6 +74,7 @@ class ChaosHandler
         $span->addEvent(self::CHAOS_HANDLER_TRIGGERED_EVENT_KEY);
         $scope = $span->activate();
         try {
+            $span->setAttribute(self::CHAOS_HANDLER_ENABLED_KEY, true);
             // Request-level options override global options
             if (array_key_exists(ChaosOption::class, $options) && $options[ChaosOption::class] instanceof ChaosOption) {
                 $this->chaosOption = $options[ChaosOption::class];
