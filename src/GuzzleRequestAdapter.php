@@ -378,11 +378,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = $span ?? $this->tracer->spanBuilder('getHttpResponseMessage')
             ->startSpan();
         $currentContext = Context::getCurrent();
-        $psrRequestFromInfoSpan = $this->tracer->spanBuilder('getPsrRequestFromRequestInformation');
-        if ($span !== null) {
-            $psrRequestFromInfoSpan = $psrRequestFromInfoSpan->setParent($currentContext);
-        }
-        $psrRequestFromInfoSpan = $psrRequestFromInfoSpan->addLink($span->getContext())
+        $psrRequestFromInfoSpan = $this->tracer->spanBuilder('getPsrRequestFromRequestInformation')
+            ->setParent($currentContext)->addLink($span->getContext())
             ->startSpan();
         $scope = $psrRequestFromInfoSpan->activate();
         try {
