@@ -574,7 +574,8 @@ class GuzzleRequestAdapter implements RequestAdapter
             $responseBodyContents = $response->getBody()->getContents();
 
             $errorSpan->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
-            $span->setAttribute('status_message', 'received_error_response');
+            $errorSpan->setAttribute('status_message', 'received_error_response');
+            $errorSpan->setAttribute('status', 'error');
             $statusCodeAsString = "$statusCode";
             if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
                     !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
