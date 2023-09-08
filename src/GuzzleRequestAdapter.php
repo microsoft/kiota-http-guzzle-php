@@ -46,6 +46,7 @@ use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
+use Throwable;
 
 /**
  * Class GuzzleRequestAdapter
@@ -191,7 +192,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = self::startTracingSpan($requestInfo, 'sendCollectionAsync');
         $scope = $span->activate();
         try {
-            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            $finalResponse = $this->getHttpResponseMessage($requestInfo, '', $span)->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, $span) {
                     $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
@@ -228,7 +229,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveAsync');
         $scope = $span->activate();
         try {
-            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            $finalResponse = $this->getHttpResponseMessage($requestInfo, '', $span)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
                     $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
@@ -290,7 +291,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = $this->startTracingSpan($requestInfo, 'sendPrimitiveCollectionAsync');
         $scope = $span->activate();
         try {
-            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            $finalResponse = $this->getHttpResponseMessage($requestInfo, '', $span)->then(
                 function (ResponseInterface $result) use ($primitiveType, $requestInfo, $errorMappings, &$span) {
                     $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
@@ -320,7 +321,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $span = $this->startTracingSpan($requestInfo, 'sendNoContentAsync');
         $scope = $span->activate();
         try {
-            $finalResponse = $this->getHttpResponseMessage($requestInfo)->then(
+            $finalResponse = $this->getHttpResponseMessage($requestInfo, '', $span)->then(
                 function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
                     $this->setHttpResponseAttributesInSpan($span, $result);
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
@@ -468,29 +469,26 @@ class GuzzleRequestAdapter implements RequestAdapter
      *
      * @param RequestInformation $requestInformation
      * @param string $claims additional claims to request if CAE fails
-     * @param SpanInterface|null $span
+     * @param SpanInterface $span
      * @return Promise
      */
     private function getHttpResponseMessage(RequestInformation $requestInformation,
-                                            string $claims = '',
-                                            ?SpanInterface $span = null): Promise
+                                            string $claims,
+                                            SpanInterface $span): Promise
     {
         $httpResponseSpan = $this->tracer->spanBuilder('getHttpResponseMessage');
-        if ($span !== null) {
-            $span->setAttribute('com.microsoft.kiota.authentication.additional_claims_provided', empty(trim($claims)));
-            $httpResponseSpan = $httpResponseSpan->addLink($span->getContext())->setParent($span->storeInContext(Context::getCurrent()));
-        }
+        $span->setAttribute('com.microsoft.kiota.authentication.additional_claims_provided', empty(trim($claims)));
+        $httpResponseSpan = $httpResponseSpan->addLink($span->getContext())->setParent($span->storeInContext(Context::getCurrent()));
         $httpResponseSpan = $httpResponseSpan->startSpan();
         $scope = $httpResponseSpan->activate();
         try {
             $requestInformation->pathParameters['baseurl'] = $this->getBaseUrl();
-            if ($span !== null)
-                try {
-                    $requestInformation->getUri();
-                    $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', true);
-                } catch (\Throwable $ex){
-                    $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', false);
-                }
+            try {
+                $requestInformation->getUri();
+                $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', true);
+            } catch (Throwable $ex){
+                $span->setAttribute('com.microsoft.kiota.authentication.is_url_valid', false);
+            }
             $additionalAuthContext                         = $claims ? ['claims' => $claims] : [];
             $request                                       = $this->authenticationProvider->authenticateRequest($requestInformation, $additionalAuthContext);
             $finalResult                                   = $request->then(
@@ -550,7 +548,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                 }
                 $claims = $matches[1];
                 /** @var ResponseInterface $response */
-                $response = $this->getHttpResponseMessage($requestInformation, $claims)->wait();
+                $response = $this->getHttpResponseMessage($requestInformation, $claims, $span)->wait();
             } finally {
                 $span->end();
             }
