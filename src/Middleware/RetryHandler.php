@@ -15,7 +15,6 @@ use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Promise\PromiseInterface;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
-use OpenTelemetry\API\Common\Instrumentation\Globals;
 use OpenTelemetry\API\Trace\SpanInterface;
 use OpenTelemetry\API\Trace\StatusCode;
 use OpenTelemetry\API\Trace\TracerInterface;
@@ -118,7 +117,7 @@ class RetryHandler
                 $span->setAttribute('retryCount', $retries);
                 $delaySecs = $this->calculateDelay($retries, $response);
                 $span->setAttribute('delaySeconds', $delaySecs);
-                $fulfilledSpan->setStatus(StatusCode::STATUS_OK, 'RetryFullFilled');
+                $fullFilledSpan->setStatus(StatusCode::STATUS_OK, 'RetryFullFilled');
                 if (!$this->shouldRetry($request, $retries, $delaySecs, $response, $span)
                     || $this->exceedRetriesTimeLimit($delaySecs)) {
                     return $response;
