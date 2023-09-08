@@ -122,7 +122,7 @@ class CompressionHandler
     private function onFulfilled(array $options, SpanInterface $parentSpan): callable
     {
         return function (ResponseInterface $response) use ($options, $parentSpan) {
-            $span = $this->tracer->spanBuilder('compressionHandlerOnRejected')
+            $span = $this->tracer->spanBuilder('compressionHandlerOnFulfilled')
                 ->setParent(Context::getCurrent())
                 ->addLink($parentSpan->getContext())
                 ->startSpan();

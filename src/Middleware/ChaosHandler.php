@@ -137,7 +137,7 @@ class ChaosHandler
      */
     private function getRandomResponsesByRequestMethod(string $httpMethod, SpanInterface $parentSpan): ?array
     {
-        $span = $this->tracer->spanBuilder('randomChaosResponse')
+        $span = $this->tracer->spanBuilder('getRandomResponsesByRequestMethod')
             ->setParent(Context::getCurrent())
             ->addLink($parentSpan->getContext())
             ->startSpan();
