@@ -34,6 +34,7 @@ class GuzzleRequestAdapterTest extends TestCase
     protected function setUp(): void
     {
         $this->requestInformation = new RequestInformation();
+        $this->requestInformation->urlTemplate = '';
         $this->requestInformation->httpMethod = 'GET';
         $this->requestInformation->addHeaders([
             'RequestId' => '1'
