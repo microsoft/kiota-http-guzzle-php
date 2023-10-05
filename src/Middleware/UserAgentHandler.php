@@ -16,7 +16,7 @@ class UserAgentHandler
     public const USER_AGENT_HEADER_NAME = 'User-Agent';
 
     private UserAgentHandlerOption $userAgentHandlerOption;
-    /** @var callable(RequestInterface, array<string, RequestOption>): PromiseInterface $nextHandler  */
+    /** @var callable(RequestInterface, array<string, RequestOption>): PromiseInterface $nextHandler */
     private $nextHandler;
 
     /**

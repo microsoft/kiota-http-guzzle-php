@@ -11,7 +11,10 @@ namespace Microsoft\Kiota\Http\Middleware;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Uri;
+use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
+use OpenTelemetry\API\Trace\SpanInterface;
+use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 
 /**
@@ -50,6 +53,7 @@ class ParametersNameDecodingHandler
         $this->decodingOption = ($decodingOption) ?: new ParametersDecodingOption();
     }
 
+    private const PARAMETERS_DECODING_HANDLER_ENABLED = 'com.microsoft.kiota.handler.parameters_name_decoding.enable';
     /**
      * @param RequestInterface $request
      * @param array<string, mixed> $options
@@ -57,27 +61,59 @@ class ParametersNameDecodingHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        // Request-level options override global options
-        if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
-            $this->decodingOption = $options[ParametersDecodingOption::class];
+        $span = ObservabilityOption::getTracer()->spanBuilder('ParametersNameDecodingHandler_intercept?')
+            ->startSpan();
+        $scope = $span->activate();
+        try {
+            $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
+            // Request-level options override global options
+            if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
+                $this->decodingOption = $options[ParametersDecodingOption::class];
+            }
+            $request = $this->decodeQueryParameters($request, $span);
+            $fn  = $this->nextHandler;
+            return $fn($request, $options);
+        } finally {
+            $scope->detach();
+            $span->end();
         }
-        $request = $this->decodeQueryParameters($request);
-        $fn = $this->nextHandler;
-        return $fn($request, $options);
     }
 
     /**
      * @param RequestInterface $request
+     * @param SpanInterface $span
      * @return RequestInterface
      */
-    private function decodeQueryParameters(RequestInterface $request): RequestInterface
+    private function decodeQueryParameters(RequestInterface $request, SpanInterface $span): RequestInterface
     {
-        if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
-            return $request;
+        $childSpan = ObservabilityOption::getTracer()->spanBuilder('decodeQueryParameters')
+            ->setParent(Context::getCurrent())
+            ->addLink($span->getContext())
+            ->startSpan();
+        try {
+            if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
+                $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
+                return $request;
+            }
+            $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
+            return $request->withUri(new Uri($decodedUri));
+        } finally {
+            $childSpan->end();
         }
-        $encodingsToReplace = array_map(function ($character) { return "%".dechex(ord($character)); }, $this->decodingOption->getParametersToDecode());
-        /** @var string $decodedUri */
-        $decodedUri = str_ireplace($encodingsToReplace, $this->decodingOption->getParametersToDecode(), $request->getUri());
-        return $request->withUri(new Uri($decodedUri));
+    }
+
+    /**
+     * @param string|null $original
+     * @param array<string>|null $charactersToDecode
+     * @return string
+     */
+    public static function decodeUriEncodedString(?string $original = null, ?array $charactersToDecode = null): string
+    {
+        if (empty($original) || empty($charactersToDecode)) {
+            return $original ?? '';
+        }
+        $encodingsToReplace = array_map(fn ($character) => "%".dechex(ord($character)), $charactersToDecode);
+        /** @returns string $decodedUri */
+        return str_ireplace($encodingsToReplace, $charactersToDecode, $original);
     }
 }
