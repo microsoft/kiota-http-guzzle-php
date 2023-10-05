@@ -17,7 +17,6 @@ use GuzzleHttp\Psr7\Request;
 use Http\Promise\FulfilledPromise;
 use Http\Promise\Promise;
 use InvalidArgumentException;
-use League\Uri\Contracts\UriException;
 use Microsoft\Kiota\Abstractions\ApiClientBuilder;
 use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
@@ -370,7 +369,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param RequestInformation $requestInformation
      * @param SpanInterface|null $span
      * @return RequestInterface
-     * @throws UriException
+     * @throws InvalidArgumentException
      */
     public function getPsrRequestFromRequestInformation(RequestInformation $requestInformation,
                                                         ?SpanInterface $span = null): RequestInterface
