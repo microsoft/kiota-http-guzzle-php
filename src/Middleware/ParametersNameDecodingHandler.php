@@ -11,6 +11,7 @@ namespace Microsoft\Kiota\Http\Middleware;
 
 use GuzzleHttp\Promise\PromiseInterface;
 use GuzzleHttp\Psr7\Uri;
+use InvalidArgumentException;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use OpenTelemetry\API\Trace\SpanInterface;
@@ -61,7 +62,7 @@ class ParametersNameDecodingHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        $span = ObservabilityOption::getTracer()->spanBuilder('ParametersNameDecodingHandler_intercept?')
+        $span = ObservabilityOption::getTracer()->spanBuilder('ParametersNameDecodingHandler_invoke?')
             ->startSpan();
         $scope = $span->activate();
         try {
@@ -92,7 +93,6 @@ class ParametersNameDecodingHandler
             ->startSpan();
         try {
             if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
-                $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
                 return $request;
             }
             $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
@@ -112,8 +112,22 @@ class ParametersNameDecodingHandler
         if (empty($original) || empty($charactersToDecode)) {
             return $original ?? '';
         }
+        $queryParams = parse_url($original, PHP_URL_QUERY);
+        if (!$queryParams) {
+            return $original;
+        }
+        $queryParamKeyValues = [];
+        foreach (explode("&", $queryParams) as $nameValueString) {
+            $nameVal = explode("=", $nameValueString);
+            $queryParamKeyValues[$nameVal[0]] = $nameVal[1] ?? '';
+        }
         $encodingsToReplace = array_map(fn ($character) => "%".dechex(ord($character)), $charactersToDecode);
+        $decodedQueryParams = [];
+        foreach ($queryParamKeyValues as $key => $val) {
+            $decodedKey = str_ireplace($encodingsToReplace, $charactersToDecode, $key);
+            $decodedQueryParams [] = "{$decodedKey}={$val}";
+        }
         /** @returns string $decodedUri */
-        return str_ireplace($encodingsToReplace, $charactersToDecode, $original);
+        return str_replace($queryParams, implode("&", $decodedQueryParams), $original);
     }
 }
