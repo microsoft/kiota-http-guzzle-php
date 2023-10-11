@@ -15,7 +15,7 @@ use Psr\Http\Message\ResponseInterface;
 class ParametersNameDecodingHandlerTest extends TestCase
 {
     private string $defaultUrl = 'https://graph.microsoft.com/me/messages?%24top=10&created%2din=2022-10-05&subject%2ename=%7eWelcome';
-    private string $defaultDecodedUrl = 'https://graph.microsoft.com/me/messages?$top=10&created-in=2022-10-05&subject.name=~Welcome';
+    private string $defaultDecodedUrl = 'https://graph.microsoft.com/me/messages?$top=10&created-in=2022-10-05&subject.name=%7eWelcome';
 
     public function testDefaultDecoding()
     {
@@ -72,6 +72,45 @@ class ParametersNameDecodingHandlerTest extends TestCase
             ParametersDecodingOption::class => $decodingOption
         ];
         $this->executeMockRequest($mockResponse, new ParametersDecodingOption(), $url, $requestOptions);
+    }
+
+    public function testQueryParamValuesNotDecoded()
+    {
+        $url = $this->defaultUrl."&key=%24top";
+        $expected = $this->defaultDecodedUrl."&key=%24top";
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
+    }
+
+    public function testDecodingWithoutQueryParametersInUrl()
+    {
+        $url = "https://abc.com#%24";
+        $expected = $url;
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
+    }
+
+    public function testDecodingWithUrlWithoutSpecialCharacters()
+    {
+        $url = "https://abc.com?key=val&name=val";
+        $expected = $url;
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
     }
 
     private function executeMockRequest(array $mockResponses, ?ParametersDecodingOption $decodingOption = null, string $url = null, array $requestOptions = []): ResponseInterface
