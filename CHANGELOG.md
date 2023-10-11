@@ -8,10 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+## [0.8.4] - 2023-10-11
+
+### Added
 - Adds CHANGELOG. [#84](https://github.com/microsoft/kiota-http-guzzle-php/pull/84)
 
 ### Changed
 - Fix issue with deserialization of error response. [#83](https://github.com/microsoft/kiota-http-guzzle-php/pull/83)
+- Ensure only query parameter names are decoded in `parameterNamesDecodingHandler`. [#82](https://github.com/microsoft/kiota-http-guzzle-php/pull/82)
 
 ## [0.8.3] - 2023-10-05
 
