@@ -572,7 +572,8 @@ class GuzzleRequestAdapter implements RequestAdapter
         $errorSpan->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, false);
         try {
             $responseBodyContents = $response->getBody()->getContents();
-            if (empty($responseBodyContents)) {
+            $response->getBody()->rewind();
+            if (!empty($responseBodyContents)) {
                 $errorSpan->setAttribute(self::ERROR_BODY_FOUND_ATTRIBUTE_NAME, true);
             }
             $errorSpan->setStatus(StatusCode::STATUS_ERROR, 'received_error_response');
