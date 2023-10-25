@@ -14,7 +14,6 @@ use DateTime;
 use Exception;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Psr7\Request;
-use Http\Promise\FulfilledPromise;
 use Http\Promise\Promise;
 use InvalidArgumentException;
 use Microsoft\Kiota\Abstractions\ApiClientBuilder;
@@ -107,11 +106,12 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
 
     /**
+     * @template T of Parsable
      * @param RequestInformation $requestInfo
      * @param ResponseInterface $result
-     * @param array<string,array{string,string}>|null $errorMappings
+     * @param array<string, array{class-string<T>, string}>|null $errorMappings
      * @param SpanInterface $span
-     * @return Promise|null
+     * @return Promise<ResponseInterface>|null
      */
     private function tryHandleResponse(RequestInformation $requestInfo,
                                        ResponseInterface $result,
@@ -119,10 +119,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                                        SpanInterface $span): ?Promise
     {
         $responseHandlerOption = $requestInfo->getRequestOptions()[ResponseHandlerOption::class] ?? null;
-        if ($responseHandlerOption && is_a($responseHandlerOption, ResponseHandlerOption::class)) {
+        if ($responseHandlerOption && $responseHandlerOption instanceof ResponseHandlerOption) {
             $responseHandler = $responseHandlerOption->getResponseHandler();
             $span->addEvent('Event - com.microsoft.kiota.response_handler_invoked?');
-            /** @phpstan-ignore-next-line False alarm?*/
             return $responseHandler->handleResponseAsync($result, $errorMappings);
         }
         return null;
@@ -196,11 +195,11 @@ class GuzzleRequestAdapter implements RequestAdapter
 
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
-                        return $result;
+                        return $response;
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
-                        return new FulfilledPromise(null);
+                        return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
                     $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
@@ -232,7 +231,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
-                        return $result;
+                        return $response;
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     $this->setResponseType($primitiveType, $span);
@@ -294,7 +293,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
-                        return $result;
+                        return $response;
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
@@ -324,7 +323,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
-                        return $result;
+                        return $response;
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     return null;
@@ -409,7 +408,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * Converts RequestInformation object to an authenticated(containing auth header) PSR-7 Request Object.
      *
      * @param RequestInformation $requestInformationInformation
-     * @return Promise
+     * @return Promise<RequestInterface>
      */
     public function convertToNative(RequestInformation $requestInformationInformation): Promise
     {
@@ -461,7 +460,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param RequestInformation $requestInfo
      * @param string $claims additional claims to request if CAE fails
      * @param SpanInterface $span
-     * @return Promise
+     * @return Promise<ResponseInterface>
      */
     private function getHttpResponseMessage(RequestInformation $requestInfo,
                                             string $claims,

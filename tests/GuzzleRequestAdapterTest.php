@@ -8,6 +8,7 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\Utils;
 use Http\Promise\FulfilledPromise;
+use Http\Promise\Promise;
 use Microsoft\Kiota\Abstractions\ApiException;
 use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\Enum;
@@ -113,7 +114,7 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'));
+        $this->assertInstanceOf(Promise::class, $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
     }
 
     public function testSendCollectionAsync(): void
@@ -133,7 +134,7 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'));
+        $this->assertInstanceOf(Promise::class, $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
     }
 
     public function testSendPrimitiveAsync(): void
@@ -158,7 +159,7 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int');
+        $this->assertInstanceOf(Promise::class, $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait());
     }
 
     public function testSendPrimitiveCollectionAsync(): void
@@ -178,7 +179,7 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string');
+        $this->assertInstanceOf(Promise::class, $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string')->wait());
     }
 
     public function testSendNoContentAsync(): void
@@ -195,7 +196,7 @@ class GuzzleRequestAdapterTest extends TestCase
         $customResponseHandler->expects($this->once())
             ->method('handleResponseAsync');
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $requestAdapter->sendNoContentAsync($this->requestInformation);
+        $this->assertInstanceOf(Promise::class, $requestAdapter->sendNoContentAsync($this->requestInformation)->wait());
     }
 
     public function testExceptionThrownOnErrorResponses(): void
