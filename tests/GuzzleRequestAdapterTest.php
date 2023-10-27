@@ -22,6 +22,8 @@ use Microsoft\Kiota\Abstractions\Serialization\SerializationWriterFactory;
 use Microsoft\Kiota\Http\GuzzleRequestAdapter;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use PHPUnit\Framework\TestCase;
+use Microsoft\Kiota\Abstractions\NativeResponseHandler;
+use Psr\Http\Message\ResponseInterface;
 
 class GuzzleRequestAdapterTest extends TestCase
 {
@@ -109,12 +111,19 @@ class GuzzleRequestAdapterTest extends TestCase
 
     public function testSendAsyncWithResponseHandler(): void
     {
-        $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => $this->contentType])]);
+        $requestAdapter = $this->mockRequestAdapter([
+            new Response(200, ['Content-Type' => $this->contentType]),
+            new Response(200, ['Content-Type' => $this->contentType])
+        ]);
         $customResponseHandler = $this->createMock(ResponseHandler::class);
-        $customResponseHandler->expects($this->once())
-            ->method('handleResponseAsync');
+        $customResponseHandler->method('handleResponseAsync')->willReturn(new FulfilledPromise(new TestUser()));
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $this->assertInstanceOf(Promise::class, $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
+        $this->assertInstanceOf(TestUser::class, $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
+
+        $nativeResponseHandler = new NativeResponseHandler();
+        $this->requestInformation->addRequestOptions(new ResponseHandlerOption($nativeResponseHandler));
+        $this->assertNull($requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
+        $this->assertInstanceOf(ResponseInterface::class, $nativeResponseHandler->getResponse());
     }
 
     public function testSendCollectionAsync(): void
@@ -131,10 +140,12 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
         $customResponseHandler = $this->createMock(ResponseHandler::class);
-        $customResponseHandler->expects($this->once())
-            ->method('handleResponseAsync');
+        $customResponseHandler->method('handleResponseAsync')->willReturn(new FulfilledPromise([new TestUser()]));
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $this->assertInstanceOf(Promise::class, $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
+        $result = $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
+        $this->assertIsArray($result);
+        $this->assertEquals(1, sizeof($result));
+        $this->assertInstanceOf(TestUser::class, $result[0]);
     }
 
     public function testSendPrimitiveAsync(): void
@@ -156,10 +167,11 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
         $customResponseHandler = $this->createMock(ResponseHandler::class);
-        $customResponseHandler->expects($this->once())
-            ->method('handleResponseAsync');
+        $customResponseHandler->method('handleResponseAsync')->willReturn(new FulfilledPromise(100));
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $this->assertInstanceOf(Promise::class, $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait());
+        $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
+        $this->assertIsInt($result);
+        $this->assertEquals(100, $result);
     }
 
     public function testSendPrimitiveCollectionAsync(): void
@@ -176,10 +188,12 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
         $customResponseHandler = $this->createMock(ResponseHandler::class);
-        $customResponseHandler->expects($this->once())
-            ->method('handleResponseAsync');
+        $customResponseHandler->method('handleResponseAsync')->willReturn(new FulfilledPromise(['hello', 'world']));
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $this->assertInstanceOf(Promise::class, $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string')->wait());
+        $result = $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string')->wait();
+        $this->assertIsArray($result);
+        $this->assertEquals(2, sizeof($result));
+        $this->assertEquals('hello', $result[0]);
     }
 
     public function testSendNoContentAsync(): void
@@ -193,10 +207,9 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
         $customResponseHandler = $this->createMock(ResponseHandler::class);
-        $customResponseHandler->expects($this->once())
-            ->method('handleResponseAsync');
+        $customResponseHandler->method('handleResponseAsync')->willReturn(new FulfilledPromise(null));
         $this->requestInformation->addRequestOptions(new ResponseHandlerOption($customResponseHandler));
-        $this->assertInstanceOf(Promise::class, $requestAdapter->sendNoContentAsync($this->requestInformation)->wait());
+        $this->assertNull($requestAdapter->sendNoContentAsync($this->requestInformation)->wait());
     }
 
     public function testExceptionThrownOnErrorResponses(): void

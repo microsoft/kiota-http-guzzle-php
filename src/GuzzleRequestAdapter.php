@@ -45,6 +45,7 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 use Throwable;
+use UnexpectedValueException;
 
 /**
  * Class GuzzleRequestAdapter
@@ -111,7 +112,7 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @param ResponseInterface $result
      * @param array<string, array{class-string<T>, string}>|null $errorMappings
      * @param SpanInterface $span
-     * @return Promise<ResponseInterface>|null
+     * @return Promise<mixed>|null
      */
     private function tryHandleResponse(RequestInformation $requestInfo,
                                        ResponseInterface $result,
@@ -139,11 +140,15 @@ class GuzzleRequestAdapter implements RequestAdapter
             $responseMessage = $this->getHttpResponseMessage($requestInfo, '', $span);
             $finalResponse = $responseMessage->then(
                 function (ResponseInterface $result) use ($targetCallable, $requestInfo, $errorMappings, &$span) {
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
                     $this->setHttpResponseAttributesInSpan($span, $result);
+                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
-                        return $response;
+                        $customResponse = $response->wait();
+                        if ($customResponse instanceof $targetCallable[0] || is_null($customResponse)) {
+                            return $customResponse;
+                        }
+                        throw new UnexpectedValueException("Custom response handler failed to return object of expected type {$targetCallable[0]}|null");
                     }
 
                     $this->throwFailedResponse($result, $errorMappings, $span);
@@ -195,7 +200,19 @@ class GuzzleRequestAdapter implements RequestAdapter
 
                     if ($response !== null) {
                         $span->addEvent(self::EVENT_RESPONSE_HANDLER_INVOKED_KEY);
-                        return $response;
+                        $customResponse = $response->wait();
+                        if (is_array($customResponse)) {
+                            foreach ($customResponse as $item) {
+                                if (!is_null($item) && !$item instanceof $targetCallable[0]) {
+                                    throw new UnexpectedValueException("Custom response handler returned array containing invalid type. Expected type: {$targetCallable[0]}|null");
+                                }
+                            }
+                            return $customResponse;
+                        }
+                        else if (is_null($customResponse)) {
+                            return $customResponse;
+                        }
+                        throw new UnexpectedValueException("Custom response handler failed to return array of expected type: {$targetCallable[0]}|null");
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
@@ -214,7 +231,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $scope->detach();
             $span->end();
         }
-        return $finalResponse;
+        return $finalResponse; /** @phpstan-ignore-line  */
     }
 
     /**
@@ -231,7 +248,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
-                        return $response;
+                        return $response->wait();
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     $this->setResponseType($primitiveType, $span);
@@ -293,7 +310,11 @@ class GuzzleRequestAdapter implements RequestAdapter
                     $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
 
                     if ($response !== null) {
-                        return $response;
+                        $customResponse = $response->wait();
+                        if (is_array($customResponse) || is_null($customResponse)) {
+                            return $customResponse;
+                        }
+                        throw new UnexpectedValueException("Custom response handler failed to return array of expected type: {$primitiveType}");
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
@@ -320,10 +341,14 @@ class GuzzleRequestAdapter implements RequestAdapter
             $finalResponse = $this->getHttpResponseMessage($requestInfo, '', $span)->then(
                 function (ResponseInterface $result) use ($requestInfo, $errorMappings, &$span) {
                     $this->setHttpResponseAttributesInSpan($span, $result);
-                    $response = $this->tryHandleResponse($requestInfo, $result, $errorMappings, $span);
+                    $response = $this->tryHandleResponse($requestInfo, $result,$errorMappings, $span);
 
                     if ($response !== null) {
-                        return $response;
+                        $customResponse = $response->wait();
+                        if (is_null($customResponse)) {
+                            return $customResponse;
+                        }
+                        throw new UnexpectedValueException("Custom response handler failed to return value of expected return type: null");
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     return null;
