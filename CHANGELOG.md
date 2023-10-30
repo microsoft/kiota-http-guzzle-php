@@ -8,9 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Adds generics to Promise types in PHPDocs
 
 ### Changed
+
+## [0.9.0] - 2023-10-30
+
+### Added
+- Adds generics to Promise types in PHPDocs
 
 ## [0.8.4] - 2023-10-11
 
