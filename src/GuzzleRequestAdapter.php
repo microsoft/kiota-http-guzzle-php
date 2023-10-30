@@ -148,7 +148,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         if ($customResponse instanceof $targetCallable[0] || is_null($customResponse)) {
                             return $customResponse;
                         }
-                        throw new UnexpectedValueException("Custom response handler failed to return object of expected type {$targetCallable[0]}|null");
+                        throw new UnexpectedValueException(
+                            "Custom response handler failed to return object of expected type {$targetCallable[0]}|null"
+                        );
                     }
 
                     $this->throwFailedResponse($result, $errorMappings, $span);
@@ -204,15 +206,20 @@ class GuzzleRequestAdapter implements RequestAdapter
                         if (is_array($customResponse)) {
                             foreach ($customResponse as $item) {
                                 if (!is_null($item) && !$item instanceof $targetCallable[0]) {
-                                    throw new UnexpectedValueException("Custom response handler returned array containing invalid type. Expected type: {$targetCallable[0]}|null");
+                                    throw new UnexpectedValueException(
+                                        "Custom response handler returned array containing invalid type.
+                                        Expected type: {$targetCallable[0]}|null"
+                                    );
                                 }
                             }
                             return $customResponse;
                         }
-                        else if (is_null($customResponse)) {
+                        elseif (is_null($customResponse)) {
                             return $customResponse;
                         }
-                        throw new UnexpectedValueException("Custom response handler failed to return array of expected type: {$targetCallable[0]}|null");
+                        throw new UnexpectedValueException(
+                            "Custom response handler failed to return array of expected type:{$targetCallable[0]}|null"
+                        );
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
@@ -314,7 +321,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         if (is_array($customResponse) || is_null($customResponse)) {
                             return $customResponse;
                         }
-                        throw new UnexpectedValueException("Custom response handler failed to return array of expected type: {$primitiveType}");
+                        throw new UnexpectedValueException(
+                            "Custom response handler failed to return array of expected type: {$primitiveType}"
+                        );
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     if ($this->is204NoContentResponse($result)) {
@@ -348,7 +357,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         if (is_null($customResponse)) {
                             return $customResponse;
                         }
-                        throw new UnexpectedValueException("Custom response handler failed to return value of expected return type: null");
+                        throw new UnexpectedValueException(
+                            "Custom response handler failed to return value of expected return type: null"
+                        );
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     return null;
