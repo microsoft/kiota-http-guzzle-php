@@ -4,7 +4,7 @@ namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use Microsoft\Kiota\Abstractions\RequestOption;
 use Microsoft\Kiota\Http\Constants;
-use OpenTelemetry\API\Common\Instrumentation\Globals;
+use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\TracerInterface;
 
 class ObservabilityOption implements RequestOption
