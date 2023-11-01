@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.10.0]
+
+### Changed
+- Bump Abstractions
+
 ## [0.9.0] - 2023-10-30
 
 ### Added
