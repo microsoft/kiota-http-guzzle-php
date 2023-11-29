@@ -40,6 +40,10 @@ class HeadersInspectionHandler
 
     private TracerInterface $tracer;
 
+    /**
+     * @param callable $nextHandler
+     * @param HeadersInspectionHandlerOption|null $headersInspectionOption
+     */
     public function __construct(callable $nextHandler, ?HeadersInspectionHandlerOption $headersInspectionOption = null)
     {
         $this->nextHandler = $nextHandler;
@@ -59,7 +63,7 @@ class HeadersInspectionHandler
         $span->setAttribute(self::HANDLER_ENABLED_KEY, true);
 
         try {
-            if (array_key_exists(HeadersInspectionHandlerOption::class, $options) && $options[HeadersInspectionHandlerOption::class]) {
+            if (array_key_exists(HeadersInspectionHandlerOption::class, $options) && $options[HeadersInspectionHandlerOption::class] instanceof HeadersInspectionHandlerOption) {
                 $this->headersInspectionOption = $options[HeadersInspectionHandlerOption::class];
             }
 
