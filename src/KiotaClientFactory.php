@@ -13,6 +13,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware as GuzzleMiddleware;
 use GuzzleHttp\Utils;
+use Microsoft\Kiota\Http\Middleware\HeadersInspectionHandler;
 use Microsoft\Kiota\Http\Middleware\KiotaMiddleware;
 use Microsoft\Kiota\Http\Middleware\ParametersNameDecodingHandler;
 use Microsoft\Kiota\Http\Middleware\RetryHandler;
@@ -74,6 +75,7 @@ class KiotaClientFactory
         $handlerStack->push(GuzzleMiddleware::redirect(), 'kiotaRedirectHandler');
         $handlerStack->push(KiotaMiddleware::userAgent(), UserAgentHandler::HANDLER_NAME);
         $handlerStack->push(KiotaMiddleware::retry(), RetryHandler::HANDLER_NAME);
+        $handlerStack->push(KiotaMiddleware::headersInspection(), HeadersInspectionHandler::HANDLER_NAME);
         return $handlerStack;
     }
 }
