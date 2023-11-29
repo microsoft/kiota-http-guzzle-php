@@ -18,6 +18,10 @@ use Psr\Http\Message\ResponseInterface;
 
 /**
  * Class HeadersInspectionHandler
+ *
+ * Handler that allows you to get the raw request and response headers while still using the default deserialization
+ * of response bodies to models. Disabled by default. Configured using a {@link HeadersInspectionHandlerOption}
+ *
  * @package Microsoft\Kiota\Http\Middleware
  * @copyright 2023 Microsoft Corporation
  * @license https://opensource.org/licenses/MIT MIT License
@@ -38,6 +42,9 @@ class HeadersInspectionHandler
      */
     private $nextHandler;
 
+    /**
+     * @var TracerInterface
+     */
     private TracerInterface $tracer;
 
     /**
@@ -63,7 +70,9 @@ class HeadersInspectionHandler
         $span->setAttribute(self::HANDLER_ENABLED_KEY, true);
 
         try {
-            if (array_key_exists(HeadersInspectionHandlerOption::class, $options) && $options[HeadersInspectionHandlerOption::class] instanceof HeadersInspectionHandlerOption) {
+            if (array_key_exists(HeadersInspectionHandlerOption::class, $options)
+                && $options[HeadersInspectionHandlerOption::class] instanceof HeadersInspectionHandlerOption
+            ) {
                 $this->headersInspectionOption = $options[HeadersInspectionHandlerOption::class];
             }
 

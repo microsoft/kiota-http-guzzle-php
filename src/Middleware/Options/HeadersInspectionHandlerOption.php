@@ -11,9 +11,13 @@ namespace Microsoft\Kiota\Http\Middleware\Options;
 
 use Microsoft\Kiota\Abstractions\RequestHeaders;
 use Microsoft\Kiota\Abstractions\RequestOption;
+use Microsoft\Kiota\Http\Middleware\HeadersInspectionHandler;
 
 /**
  * Class HeadersInspectionHandlerOption
+ *
+ * Configurations for a {@link HeadersInspectionHandler}
+ *
  * @package Microsoft\Kiota\Http\Middleware\Options
  * @copyright 2023 Microsoft Corporation
  * @license https://opensource.org/licenses/MIT MIT License
@@ -42,8 +46,8 @@ class HeadersInspectionHandlerOption implements RequestOption
 
 
     /**
-     * @param bool $inspectResponseHeaders
-     * @param bool $inspectRequestHeaders
+     * @param bool $inspectResponseHeaders Stores the raw response headers when true. Defaults to false.
+     * @param bool $inspectRequestHeaders Stores the raw request headers when true. Defaults to false.
      */
     public function __construct(bool $inspectResponseHeaders = false, bool $inspectRequestHeaders = false)
     {
