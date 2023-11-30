@@ -650,7 +650,9 @@ class GuzzleRequestAdapter implements RequestAdapter
 
             $rootParseNode = $this->getRootParseNode($response, $errorSpan);
             if (is_null($rootParseNode)) {
-                $ex = new ApiException("The server returned an unexpected status code but no response body for code: $statusCode");
+                $ex = new ApiException(
+                    "The server returned an unexpected status code but no response body for code: $statusCode"
+                );
                 $ex->setResponseStatusCode($response->getStatusCode());
                 $ex->setResponseHeaders($response->getHeaders());
                 $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
