@@ -149,6 +149,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $this->assertNull($requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
     }
 
+    public function testSendAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode)
+            ]);
+            $this->assertNull($requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
+    }
+
     public function testSendCollectionAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => $this->contentType])]);
@@ -207,6 +217,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
     }
 
+    public function testSendCollectionAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode)
+            ]);
+            $this->assertNull($requestAdapter->sendCollectionAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
+    }
+
     public function testSendPrimitiveAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
@@ -232,12 +252,25 @@ class GuzzleRequestAdapterTest extends TestCase
 
     public function testSendPrimitiveAsyncReturnsStream(): void
     {
-        $requestAdapter = $this->mockRequestAdapter([
-            new Response(200, ['Content-Type' => $this->contentType], Utils::streamFor('hello world')),
-        ]);
-        $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
-        $this->assertInstanceOf(StreamInterface::class, $result);
-        $this->assertEquals('hello world', $result->getContents());
+        foreach ([200, 201, 202, 203, 206] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => 'application/octet-stream'], Utils::streamFor('hello world')),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
+            $this->assertInstanceOf(StreamInterface::class, $result);
+            $this->assertEquals('hello world', $result->getContents());
+        }
+    }
+
+    public function testSendPrimitiveAsyncExpectingStreamWithNoResonseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => 'application/octet-stream']),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
+            $this->assertNull($result);
+        }
     }
 
     public function testSendPrimitiveAsyncWithResponseHandler(): void

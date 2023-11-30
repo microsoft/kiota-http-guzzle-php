@@ -22,7 +22,6 @@ use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\Enum;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
 use Microsoft\Kiota\Abstractions\RequestInformation;
-use Microsoft\Kiota\Abstractions\Serialization\Parsable;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNode;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactoryRegistry;
@@ -65,6 +64,10 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @var AuthenticationProvider
      */
     private AuthenticationProvider $authenticationProvider;
+
+    /**
+     * @var TracerInterface
+     */
     private TracerInterface $tracer;
 
     /**
@@ -159,6 +162,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootNode)) {
+                        return null;
+                    }
                     $this->setResponseType($targetCallable[0], $span);
                     return $rootNode->getObjectValue($targetCallable);
                 }
@@ -226,6 +232,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootNode)) {
+                        return null;
+                    }
                     $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
                         ->addLink($span->getContext())
                         ->startSpan();
@@ -263,6 +272,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     if ($primitiveType === StreamInterface::class) {
+                        if ($result->getBody()->getSize() === 0) {
+                            return null;
+                        }
                         return $result->getBody();
                     }
                     $rootParseNode = $this->getRootParseNode($result, $span);
@@ -329,7 +341,11 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
-                    return $this->getRootParseNode($result, $span)->getCollectionOfPrimitiveValues($primitiveType);
+                    $rootParseNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootParseNode)) {
+                        return null;
+                    }
+                    return $rootParseNode->getCollectionOfPrimitiveValues($primitiveType);
                 }
             );
         } finally {
@@ -467,9 +483,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      *
      * @param ResponseInterface $response
      * @param SpanInterface $span
-     * @return ParseNode
+     * @return ParseNode|null
      */
-    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ParseNode
+    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ?ParseNode
     {
         $rootParseNodeSpan = $this->tracer->spanBuilder('getRootParseNode')
             ->addLink($span->getContext())
@@ -477,7 +493,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $scope = $rootParseNodeSpan->activate();
         try {
             if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
-                throw new RuntimeException("No response content type header for deserialization");
+                return null;
             }
             $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
 
