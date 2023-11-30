@@ -262,13 +262,24 @@ class GuzzleRequestAdapterTest extends TestCase
         }
     }
 
-    public function testSendPrimitiveAsyncExpectingStreamWithNoResonseBodyReturnsNull(): void
+    public function testSendPrimitiveAsyncExpectingStreamWithNoResponseBodyReturnsNull(): void
     {
         foreach (range(200, 205) as $statusCode) {
             $requestAdapter = $this->mockRequestAdapter([
-                new Response($statusCode, ['Content-Type' => 'application/octet-stream']),
+                new Response($statusCode),
             ]);
             $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
+            $this->assertNull($result);
+        }
+    }
+
+    public function testSendPrimitiveAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
             $this->assertNull($result);
         }
     }
@@ -358,6 +369,13 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $this->expectException(ApiException::class);
         $requestAdapter = $this->mockRequestAdapter([new Response(400, ['Content-Type' => 'application/json'])]);
+        $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
+    }
+
+    public function testExceptionThrownOnErrorWithEmptyPayload(): void
+    {
+        $this->expectException(ApiException::class);
+        $requestAdapter = $this->mockRequestAdapter([new Response(400)]);
         $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
     }
 

@@ -22,6 +22,7 @@ use Microsoft\Kiota\Abstractions\Authentication\AuthenticationProvider;
 use Microsoft\Kiota\Abstractions\Enum;
 use Microsoft\Kiota\Abstractions\RequestAdapter;
 use Microsoft\Kiota\Abstractions\RequestInformation;
+use Microsoft\Kiota\Abstractions\Serialization\Parsable;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNode;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactoryRegistry;
@@ -278,6 +279,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return $result->getBody();
                     }
                     $rootParseNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootParseNode)) {
+                        return null;
+                    }
                     if (is_subclass_of($primitiveType, Enum::class)) {
                         return $rootParseNode->getEnumValue($primitiveType);
                     }
@@ -645,6 +649,13 @@ class GuzzleRequestAdapter implements RequestAdapter
             $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
             $rootParseNode = $this->getRootParseNode($response, $errorSpan);
+            if (is_null($rootParseNode)) {
+                $ex = new ApiException("The server returned an unexpected status code but no response body for code: $statusCode");
+                $ex->setResponseStatusCode($response->getStatusCode());
+                $ex->setResponseHeaders($response->getHeaders());
+                $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
+                throw $ex;
+            }
             if ($errorClass !== null) {
                 $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
                     ->setParent(Context::getCurrent())
