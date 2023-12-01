@@ -5,3 +5,8 @@
 /vendor export-ignore
 .gitattributes export-ignore
 .gitignore export-ignore
+/.github export-ignore
+/tests export-ignore
+phpstan.neon export-ignore
+phpunit.xml export-ignore
+sonar-project.properties export-ignore
