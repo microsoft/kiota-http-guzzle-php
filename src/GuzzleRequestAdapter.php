@@ -65,6 +65,10 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @var AuthenticationProvider
      */
     private AuthenticationProvider $authenticationProvider;
+
+    /**
+     * @var TracerInterface
+     */
     private TracerInterface $tracer;
 
     /**
@@ -159,6 +163,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootNode)) {
+                        return null;
+                    }
                     $this->setResponseType($targetCallable[0], $span);
                     return $rootNode->getObjectValue($targetCallable);
                 }
@@ -226,6 +233,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootNode)) {
+                        return null;
+                    }
                     $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
                         ->addLink($span->getContext())
                         ->startSpan();
@@ -263,9 +273,15 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     if ($primitiveType === StreamInterface::class) {
+                        if ($result->getBody()->getSize() === 0) {
+                            return null;
+                        }
                         return $result->getBody();
                     }
                     $rootParseNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootParseNode)) {
+                        return null;
+                    }
                     if (is_subclass_of($primitiveType, Enum::class)) {
                         return $rootParseNode->getEnumValue($primitiveType);
                     }
@@ -329,7 +345,11 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
-                    return $this->getRootParseNode($result, $span)->getCollectionOfPrimitiveValues($primitiveType);
+                    $rootParseNode = $this->getRootParseNode($result, $span);
+                    if (is_null($rootParseNode)) {
+                        return null;
+                    }
+                    return $rootParseNode->getCollectionOfPrimitiveValues($primitiveType);
                 }
             );
         } finally {
@@ -467,9 +487,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      *
      * @param ResponseInterface $response
      * @param SpanInterface $span
-     * @return ParseNode
+     * @return ParseNode|null
      */
-    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ParseNode
+    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ?ParseNode
     {
         $rootParseNodeSpan = $this->tracer->spanBuilder('getRootParseNode')
             ->addLink($span->getContext())
@@ -477,7 +497,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $scope = $rootParseNodeSpan->activate();
         try {
             if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
-                throw new RuntimeException("No response content type header for deserialization");
+                return null;
             }
             $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
 
@@ -629,6 +649,15 @@ class GuzzleRequestAdapter implements RequestAdapter
             $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
             $rootParseNode = $this->getRootParseNode($response, $errorSpan);
+            if (is_null($rootParseNode)) {
+                $ex = new ApiException(
+                    "The server returned an unexpected status code but no response body for code: $statusCode"
+                );
+                $ex->setResponseStatusCode($response->getStatusCode());
+                $ex->setResponseHeaders($response->getHeaders());
+                $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
+                throw $ex;
+            }
             if ($errorClass !== null) {
                 $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
                     ->setParent(Context::getCurrent())

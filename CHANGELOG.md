@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Adds Headers Inspection Handler to expose raw request and response headers
 ### Changed
+- Support 2xx range responses where response bodies are not present in the payload.
 
 ## [1.0.0]
 
