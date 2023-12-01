@@ -19,10 +19,15 @@ use Microsoft\Kiota\Abstractions\Serialization\ParseNode;
 use Microsoft\Kiota\Abstractions\Serialization\ParseNodeFactory;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriter;
 use Microsoft\Kiota\Abstractions\Serialization\SerializationWriterFactory;
+use Microsoft\Kiota\Abstractions\Store\BackingStoreFactorySingleton;
+use Microsoft\Kiota\Abstractions\Store\BackingStoreParseNodeFactory;
+use Microsoft\Kiota\Abstractions\Store\BackingStoreSerializationWriterProxyFactory;
+use Microsoft\Kiota\Abstractions\Store\InMemoryBackingStoreFactory;
 use Microsoft\Kiota\Http\GuzzleRequestAdapter;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
 use PHPUnit\Framework\TestCase;
 use Microsoft\Kiota\Abstractions\NativeResponseHandler;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
 use UnexpectedValueException;
@@ -79,8 +84,10 @@ class GuzzleRequestAdapterTest extends TestCase
     private function mockAuthenticationProvider(): void
     {
         $this->authenticationProvider = $this->createStub(AuthenticationProvider::class);
+        $authenticatedRequest = $this->requestInformation;
+        $authenticatedRequest->addHeader('Bearer', 'token');
         $this->authenticationProvider->method('authenticateRequest')
-                                    ->willReturn(new FulfilledPromise(null));
+                                    ->willReturn(new FulfilledPromise($authenticatedRequest));
     }
 
     private function mockRequestAdapter(array $mockResponses = []): GuzzleRequestAdapter
@@ -149,6 +156,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $this->assertNull($requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
     }
 
+    public function testSendAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode)
+            ]);
+            $this->assertNull($requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
+    }
+
     public function testSendCollectionAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => $this->contentType])]);
@@ -207,6 +224,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
     }
 
+    public function testSendCollectionAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode)
+            ]);
+            $this->assertNull($requestAdapter->sendCollectionAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
+    }
+
     public function testSendPrimitiveAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
@@ -232,12 +259,36 @@ class GuzzleRequestAdapterTest extends TestCase
 
     public function testSendPrimitiveAsyncReturnsStream(): void
     {
-        $requestAdapter = $this->mockRequestAdapter([
-            new Response(200, ['Content-Type' => $this->contentType], Utils::streamFor('hello world')),
-        ]);
-        $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
-        $this->assertInstanceOf(StreamInterface::class, $result);
-        $this->assertEquals('hello world', $result->getContents());
+        foreach ([200, 201, 202, 203, 206] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => 'application/octet-stream'], Utils::streamFor('hello world')),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
+            $this->assertInstanceOf(StreamInterface::class, $result);
+            $this->assertEquals('hello world', $result->getContents());
+        }
+    }
+
+    public function testSendPrimitiveAsyncExpectingStreamWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait();
+            $this->assertNull($result);
+        }
+    }
+
+    public function testSendPrimitiveAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode),
+            ]);
+            $result = $requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait();
+            $this->assertNull($result);
+        }
     }
 
     public function testSendPrimitiveAsyncWithResponseHandler(): void
@@ -293,6 +344,17 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string')->wait();
     }
 
+    public function testSendPrimitiveCollectionAsyncWithNoResponseBodyReturnsNull(): void
+    {
+        foreach (range(200, 205) as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode),
+            ]);
+            $result = $requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'int')->wait();
+            $this->assertNull($result);
+        }
+    }
+
     public function testSendNoContentAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(204, ['Content-Type' => 'application/json'])]);
@@ -325,6 +387,13 @@ class GuzzleRequestAdapterTest extends TestCase
     {
         $this->expectException(ApiException::class);
         $requestAdapter = $this->mockRequestAdapter([new Response(400, ['Content-Type' => 'application/json'])]);
+        $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
+    }
+
+    public function testExceptionThrownOnErrorWithEmptyPayload(): void
+    {
+        $this->expectException(ApiException::class);
+        $requestAdapter = $this->mockRequestAdapter([new Response(400)]);
         $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
     }
 
@@ -380,6 +449,25 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => 'application/json'])]);
         $promise = $requestAdapter->sendPrimitiveAsync($this->requestInformation, TestEnum::class);
         $this->assertInstanceOf(Enum::class, $promise->wait());
+    }
+
+    public function testEnableBackingStore(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $requestAdapter->enableBackingStore(new InMemoryBackingStoreFactory());
+        $this->assertInstanceOf(BackingStoreParseNodeFactory::class, $requestAdapter->getParseNodeFactory());
+        $this->assertInstanceOf(BackingStoreSerializationWriterProxyFactory::class, $requestAdapter->getSerializationWriterFactory());
+    }
+
+    public function testConvertToNative(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $request = $requestAdapter->convertToNative($this->requestInformation)->wait();
+        $this->assertInstanceOf(RequestInterface::class, $request);
+        $this->assertArrayHasKey('bearer',$request->getHeaders());
+        $this->assertEquals('GET', $request->getMethod());
+        $this->assertEquals($this->baseUrl, strval($request->getUri()));
+        $this->assertEquals('body', $request->getBody()->getContents());
     }
 
 }
