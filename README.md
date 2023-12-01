@@ -1,6 +1,6 @@
 # Kiota HTTP Library for PHP
 
-[![Build Status](https://travis-ci.org/microsoft/kiota-http-guzzle-php.svg?branch=main)](https://travis-ci.org/microsoft/kiota-http-guzzle-php)
+![Build Status](https://github.com/microsoft/kiota-http-guzzle-php/actions/workflows/pr-validation.yml/badge.svg)
 [![Latest Stable Version](https://poser.pugx.org/microsoft/kiota-http-guzzle/version)](https://packagist.org/packages/microsoft/kiota-http-guzzle)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=microsoft_kiota-http-guzzle-php&metric=coverage)](https://sonarcloud.io/dashboard?id=microsoft_kiota-http-guzzle-php)
 
@@ -17,7 +17,7 @@ run `composer require microsoft/kiota-http-guzzle` or add the following to your 
 ```Shell
 {
     "require": {
-        "microsoft/kiota-http-guzzle": "^0.8.0"
+        "microsoft/kiota-http-guzzle": "^1.1.0"
     }
 }
 ```

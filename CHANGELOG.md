@@ -5,11 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0]
 
 ### Added
+- Adds Headers Inspection Handler to expose raw request and response headers
 
 ### Changed
+- Support 2xx range responses where response bodies are not present in the payload.
+- Exclude non-prod files from shipped archive
 
 ## [1.0.0]
 
