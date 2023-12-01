@@ -10,6 +10,7 @@ namespace Microsoft\Kiota\Http\Middleware;
 
 use Microsoft\Kiota\Http\Middleware\Options\ChaosOption;
 use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
+use Microsoft\Kiota\Http\Middleware\Options\HeadersInspectionHandlerOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use Microsoft\Kiota\Http\Middleware\Options\TelemetryOption;
@@ -112,6 +113,13 @@ class KiotaMiddleware
     {
         return static function (callable $handler) use ($urlReplaceOption): UrlReplaceHandler {
             return new UrlReplaceHandler($handler, $urlReplaceOption ?? (new UrlReplaceOption(false, [])));
+        };
+    }
+
+    public static function headersInspection(?HeadersInspectionHandlerOption $headersInspectionOption = null): callable
+    {
+        return static function (callable $handler) use ($headersInspectionOption): HeadersInspectionHandler {
+            return new HeadersInspectionHandler($handler, $headersInspectionOption);
         };
     }
 }
