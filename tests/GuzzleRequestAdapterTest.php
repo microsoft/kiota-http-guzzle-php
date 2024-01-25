@@ -392,8 +392,6 @@ class GuzzleRequestAdapterTest extends TestCase
 
     public function testExceptionThrownOnErrorResponsesXXX(): void
     {
-        $this->expectException(MockError::class);
-        $requestAdapter = $this->mockRequestAdapter([new Response(401, ['Content-Type' => 'application/json'], '{"message" : "Failed"}')]);
         $this->parseNode = $this->createStub(ParseNode::class);
         $this->parseNodeFactory = $this->createStub(ParseNodeFactory::class);
         $this->parseNodeFactory->method('getRootParseNode')
@@ -401,6 +399,8 @@ class GuzzleRequestAdapterTest extends TestCase
         $mockError = new MockError("Failed");
         $this->parseNode->method('getObjectValue')
             ->willReturn($mockError);
+        $this->expectException(MockError::class);
+        $requestAdapter = $this->mockRequestAdapter([new Response(401, ['Content-Type' => 'application/json'], '{"message" : "Failed"}')]);
         $errorMappings = [
             'XXX' => [MockError::class, 'createFromDiscriminatorValue']
         ];
