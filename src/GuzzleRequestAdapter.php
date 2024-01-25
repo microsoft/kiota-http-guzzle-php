@@ -651,9 +651,9 @@ class GuzzleRequestAdapter implements RequestAdapter
             $errorClass = null;
             if (array_key_exists($statusCodeAsString, $errorMappings)) { // Codes 400 - <= 599
                 $errorClass = $errorMappings[$statusCodeAsString];
-            } else if (isset($errorMappings["$statusCodeAsString[0]XX"])) { // 5XX or 4XX
+            } elseif (isset($errorMappings["$statusCodeAsString[0]XX"])) { // 5XX or 4XX
                 $errorClass = $errorMappings[$statusCodeAsString[0] . 'XX'];
-            } else if (isset($errorMappings['XXX'])) { // The blanket case XXX.
+            } elseif (isset($errorMappings['XXX'])) { // The blanket case XXX.
                 $errorClass = $errorMappings['XXX'];
             }
 
