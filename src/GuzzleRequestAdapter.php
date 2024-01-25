@@ -667,6 +667,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
                 throw $ex;
             }
+
+            $error = null;
+
             if ($errorClass !== null) {
                 $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
                     ->setParent(Context::getCurrent())
@@ -677,8 +680,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
 
-            } else {
-                $error = null;
             }
 
             if ($error && is_subclass_of($error, ApiException::class)) {
