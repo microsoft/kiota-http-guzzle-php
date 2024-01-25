@@ -390,6 +390,23 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter->sendAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait();
     }
 
+    public function testExceptionThrownOnErrorResponsesXXX(): void
+    {
+        $this->expectException(MockError::class);
+        $requestAdapter = $this->mockRequestAdapter([new Response(401, ['Content-Type' => 'application/json'], '{"message" : "Failed"}')]);
+        $this->parseNode = $this->createStub(ParseNode::class);
+        $this->parseNodeFactory = $this->createStub(ParseNodeFactory::class);
+        $this->parseNodeFactory->method('getRootParseNode')
+            ->willReturn($this->parseNode);
+        $mockError = new MockError("Failed");
+        $this->parseNode->method('getObjectValue')
+            ->willReturn($mockError);
+        $errorMappings = [
+            'XXX' => [MockError::class, 'createFromDiscriminatorValue']
+        ];
+        $requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'], $errorMappings)->wait();
+    }
+
     public function testExceptionThrownOnErrorWithEmptyPayload(): void
     {
         $this->expectException(ApiException::class);
@@ -525,4 +542,26 @@ class TestEnum extends Enum
 {
     const PASS = 'pass';
     const FAIL = 'fail';
+}
+
+class MockError extends ApiException implements Parsable
+{
+    public function __construct(string $message)
+    {
+        parent::__construct($message);
+    }
+    public function getFieldDeserializers(): array
+    {
+        return [];
+    }
+
+    public function serialize(SerializationWriter $writer): void
+    {
+    }
+
+    public function createFromDiscriminatorValue(ParseNode $parseNode): MockError
+    {
+        return new MockError("");
+    }
+
 }
