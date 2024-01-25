@@ -407,6 +407,23 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'], $errorMappings)->wait();
     }
 
+    public function testExceptionThrownOnErrorResponses4XX(): void
+    {
+        $this->parseNode = $this->createStub(ParseNode::class);
+        $this->parseNodeFactory = $this->createStub(ParseNodeFactory::class);
+        $this->parseNodeFactory->method('getRootParseNode')
+            ->willReturn($this->parseNode);
+        $mockError = new MockError("Failed");
+        $this->parseNode->method('getObjectValue')
+            ->willReturn($mockError);
+        $this->expectException(MockError::class);
+        $requestAdapter = $this->mockRequestAdapter([new Response(400, ['Content-Type' => 'application/json'], '{"message" : "Failed 4XX"}')]);
+        $errorMappings = [
+            '4XX' => [MockError::class, 'createFromDiscriminatorValue']
+        ];
+        $requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'], $errorMappings)->wait();
+    }
+
     public function testExceptionThrownOnErrorWithEmptyPayload(): void
     {
         $this->expectException(ApiException::class);
