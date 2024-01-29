@@ -32,6 +32,7 @@ use Microsoft\Kiota\Abstractions\Store\BackingStoreFactory;
 use Microsoft\Kiota\Abstractions\Store\BackingStoreFactorySingleton;
 use Microsoft\Kiota\Abstractions\Types\Date;
 use Microsoft\Kiota\Abstractions\Types\Time;
+use Microsoft\Kiota\Http\Exceptions\NoContentTypeHeaderException;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
@@ -65,10 +66,6 @@ class GuzzleRequestAdapter implements RequestAdapter
      * @var AuthenticationProvider
      */
     private AuthenticationProvider $authenticationProvider;
-
-    /**
-     * @var TracerInterface
-     */
     private TracerInterface $tracer;
 
     /**
@@ -163,9 +160,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
-                    if (is_null($rootNode)) {
-                        return null;
-                    }
                     $this->setResponseType($targetCallable[0], $span);
                     return $rootNode->getObjectValue($targetCallable);
                 }
@@ -233,9 +227,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
-                    if (is_null($rootNode)) {
-                        return null;
-                    }
                     $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.getCollectionOfObjectValues')
                         ->addLink($span->getContext())
                         ->startSpan();
@@ -273,15 +264,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                         return null;
                     }
                     if ($primitiveType === StreamInterface::class) {
-                        if ($result->getBody()->getSize() === 0) {
-                            return null;
-                        }
                         return $result->getBody();
                     }
                     $rootParseNode = $this->getRootParseNode($result, $span);
-                    if (is_null($rootParseNode)) {
-                        return null;
-                    }
                     if (is_subclass_of($primitiveType, Enum::class)) {
                         return $rootParseNode->getEnumValue($primitiveType);
                     }
@@ -345,11 +330,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     if ($this->is204NoContentResponse($result)) {
                         return null;
                     }
-                    $rootParseNode = $this->getRootParseNode($result, $span);
-                    if (is_null($rootParseNode)) {
-                        return null;
-                    }
-                    return $rootParseNode->getCollectionOfPrimitiveValues($primitiveType);
+                    return $this->getRootParseNode($result, $span)->getCollectionOfPrimitiveValues($primitiveType);
                 }
             );
         } finally {
@@ -487,9 +468,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      *
      * @param ResponseInterface $response
      * @param SpanInterface $span
-     * @return ParseNode|null
+     * @return ParseNode
      */
-    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ?ParseNode
+    private function getRootParseNode(ResponseInterface $response, SpanInterface $span): ParseNode
     {
         $rootParseNodeSpan = $this->tracer->spanBuilder('getRootParseNode')
             ->addLink($span->getContext())
@@ -497,7 +478,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $scope = $rootParseNodeSpan->activate();
         try {
             if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
-                return null;
+                throw new NoContentTypeHeaderException("No response content type header for deserialization", $response);
             }
             $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
 
@@ -637,8 +618,7 @@ class GuzzleRequestAdapter implements RequestAdapter
             $statusCodeAsString = "$statusCode";
             if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
                     !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
-                    !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"]))) &&
-                    !isset($errorMappings['XXX'])) {
+                    !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
                 $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, false);
                 $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
                 $ex->setResponseStatusCode($response->getStatusCode());
@@ -647,29 +627,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                 throw $ex;
             }
             $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, true);
-
-            $errorClass = null;
-            if (array_key_exists($statusCodeAsString, $errorMappings)) { // Codes 400 - <= 599
-                $errorClass = $errorMappings[$statusCodeAsString];
-            } elseif (isset($errorMappings["$statusCodeAsString[0]XX"])) { // 5XX or 4XX
-                $errorClass = $errorMappings[$statusCodeAsString[0] . 'XX'];
-            } elseif (isset($errorMappings['XXX'])) { // The blanket case XXX.
-                $errorClass = $errorMappings['XXX'];
-            }
+            $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
 
             $rootParseNode = $this->getRootParseNode($response, $errorSpan);
-            if (is_null($rootParseNode)) {
-                $ex = new ApiException(
-                    "The server returned an unexpected status code but no response body for code: $statusCode"
-                );
-                $ex->setResponseStatusCode($response->getStatusCode());
-                $ex->setResponseHeaders($response->getHeaders());
-                $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
-                throw $ex;
-            }
-
-            $error = null;
-
             if ($errorClass !== null) {
                 $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
                     ->setParent(Context::getCurrent())
@@ -680,6 +640,8 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
 
+            } else {
+                $error = null;
             }
 
             if ($error && is_subclass_of($error, ApiException::class)) {
