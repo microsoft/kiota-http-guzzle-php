@@ -32,6 +32,7 @@ use Microsoft\Kiota\Abstractions\Store\BackingStoreFactory;
 use Microsoft\Kiota\Abstractions\Store\BackingStoreFactorySingleton;
 use Microsoft\Kiota\Abstractions\Types\Date;
 use Microsoft\Kiota\Abstractions\Types\Time;
+use Microsoft\Kiota\Http\Exceptions\NoContentTypeHeaderException;
 use Microsoft\Kiota\Http\Middleware\Options\ObservabilityOption;
 use Microsoft\Kiota\Http\Middleware\Options\ParametersDecodingOption;
 use Microsoft\Kiota\Http\Middleware\Options\ResponseHandlerOption;
@@ -43,7 +44,6 @@ use OpenTelemetry\Context\Context;
 use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\StreamInterface;
-use RuntimeException;
 use Throwable;
 use UnexpectedValueException;
 
@@ -497,7 +497,7 @@ class GuzzleRequestAdapter implements RequestAdapter
         $scope = $rootParseNodeSpan->activate();
         try {
             if (!$response->hasHeader(RequestInformation::$contentTypeHeader)) {
-                return null;
+                throw new NoContentTypeHeaderException("No response content type header for deserialization", $response);
             }
             $contentType = explode(';', $response->getHeaderLine(RequestInformation::$contentTypeHeader));
 
