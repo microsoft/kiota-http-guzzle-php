@@ -637,7 +637,8 @@ class GuzzleRequestAdapter implements RequestAdapter
             $statusCodeAsString = "$statusCode";
             if ($errorMappings === null || (!array_key_exists($statusCodeAsString, $errorMappings) &&
                     !($statusCode >= 400 && $statusCode < 500 && isset($errorMappings['4XX'])) &&
-                    !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"])))) {
+                    !($statusCode >= 500 && $statusCode < 600 && isset($errorMappings["5XX"]))) &&
+                    !isset($errorMappings['XXX'])) {
                 $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, false);
                 $ex = new ApiException("the server returned an unexpected status code and no error class is registered for this code $statusCode $responseBodyContents.");
                 $ex->setResponseStatusCode($response->getStatusCode());
@@ -646,7 +647,15 @@ class GuzzleRequestAdapter implements RequestAdapter
                 throw $ex;
             }
             $span->setAttribute(self::ERROR_MAPPING_FOUND_ATTRIBUTE_NAME, true);
-            $errorClass = array_key_exists($statusCodeAsString, $errorMappings) ? $errorMappings[$statusCodeAsString] : ($errorMappings[$statusCodeAsString[0] . 'XX'] ?? null);
+
+            $errorClass = null;
+            if (array_key_exists($statusCodeAsString, $errorMappings)) { // Codes 400 - <= 599
+                $errorClass = $errorMappings[$statusCodeAsString];
+            } elseif (isset($errorMappings["$statusCodeAsString[0]XX"])) { // 5XX or 4XX
+                $errorClass = $errorMappings[$statusCodeAsString[0] . 'XX'];
+            } elseif (isset($errorMappings['XXX'])) { // The blanket case XXX.
+                $errorClass = $errorMappings['XXX'];
+            }
 
             $rootParseNode = $this->getRootParseNode($response, $errorSpan);
             if (is_null($rootParseNode)) {
@@ -658,6 +667,9 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $errorSpan->recordException($ex, ['message' => '', 'know_error' => false]);
                 throw $ex;
             }
+
+            $error = null;
+
             if ($errorClass !== null) {
                 $spanForDeserialization = $this->tracer->spanBuilder('ParseNode.GetObjectValue()')
                     ->setParent(Context::getCurrent())
@@ -668,8 +680,6 @@ class GuzzleRequestAdapter implements RequestAdapter
                 $this->setResponseType($errorClass[0], $spanForDeserialization);
                 $spanForDeserialization->end();
 
-            } else {
-                $error = null;
             }
 
             if ($error && is_subclass_of($error, ApiException::class)) {
