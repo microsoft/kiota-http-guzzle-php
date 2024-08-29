@@ -438,13 +438,13 @@ class GuzzleRequestAdapter implements RequestAdapter
         $scope = $psrRequestFromInfoSpan->activate();
         try {
             $requestInformation->pathParameters["baseurl"] = $this->getBaseUrl();
-            $span->setAttribute('http.method', $requestInformation->httpMethod);
-            $span->setAttribute('http.scheme', explode(':', $requestInformation->getUri())[0]);
+            $span->setAttribute('http.request.method', $requestInformation->httpMethod);
+            $span->setAttribute('server.address', explode(':', $requestInformation->getUri())[0]);
             if ($this->getObservabilityOptionsFromRequest($requestInformation)->getIncludeEUIIAttributes()) {
-                $span->setAttribute('http.uri', $requestInformation->getUri());
+                $span->setAttribute('url.full', $requestInformation->getUri());
             }
             if (!empty($requestInformation->content)) {
-                $span->setAttribute('http.request_content_length?', $requestInformation->content->getSize());
+                $span->setAttribute('http.request.body.size?', $requestInformation->content->getSize());
             }
 
             $result = new Request(
@@ -718,9 +718,9 @@ class GuzzleRequestAdapter implements RequestAdapter
         $decUriTemplate = ParametersNameDecodingHandler::decodeUriEncodedString($requestInfo->urlTemplate, $parametersToDecode);
         $telemetryPathValue = empty($decUriTemplate) ? '' : preg_replace($queryReg, '', $decUriTemplate);
         $span = $this->tracer->spanBuilder("$methodName - $telemetryPathValue")->startSpan();
-        $span->setAttribute("http.uri_template", $decUriTemplate);
-        $span->setAttribute('http.method', $requestInfo->httpMethod);
-        $span->setAttribute('http.request_content_type?', $requestInfo->getHeaders()->get(RequestInformation::$contentTypeHeader));
+        $span->setAttribute("url.uri_template", $decUriTemplate);
+        $span->setAttribute('http.request.method', $requestInfo->httpMethod);
+        $span->setAttribute('http.request.header.content-type?', $requestInfo->getHeaders()->get(RequestInformation::$contentTypeHeader));
         return $span;
     }
 
@@ -731,9 +731,9 @@ class GuzzleRequestAdapter implements RequestAdapter
      */
     private function setHttpResponseAttributesInSpan(SpanInterface $span, ResponseInterface $response): void
     {
-        $span->setAttribute('http.status_code', $response->getStatusCode());
-        $span->setAttribute('http.flavor', $response->getProtocolVersion());
-        $span->setAttribute('http.response_content_type?', $response->getHeaderLine('Content-Type'));
+        $span->setAttribute('http.response.status_code', $response->getStatusCode());
+        $span->setAttribute('network.protocol.version', $response->getProtocolVersion());
+        $span->setAttribute('http.response.header.content-type?', $response->getHeaderLine('Content-Type'));
     }
 
     /**
