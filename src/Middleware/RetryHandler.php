@@ -39,7 +39,10 @@ class RetryHandler
     public const HANDLER_NAME = 'kiotaRetryHandler';
     private const RETRY_AFTER_HEADER = "Retry-After";
     private const RETRY_ATTEMPT_HEADER = "Retry-Attempt";
-
+    private const RESEND_COUNT_ATTRIBUTE = "http.request.resend_count";
+    private const RESEND_DELAY_ATTRIBUTE = "http.request.resend_delay";
+    private const STATUS_CODE_ATTRIBUTE = "http.response.status_code";
+    
     /**
      * @var TracerInterface
      */
@@ -114,9 +117,11 @@ class RetryHandler
                     return $response;
                 }
                 $retries = $this->getRetries($request);
-                $span->setAttribute('retryCount', $retries);
+                $span->setAttribute(self::RESEND_COUNT_ATTRIBUTE, $retries);
                 $delaySecs = $this->calculateDelay($retries, $response);
-                $span->setAttribute('delaySeconds', $delaySecs);
+                $span->setAttribute(self::RESEND_DELAY_ATTRIBUTE, $delaySecs);
+                $statusCode = $response->getStatusCode();
+                $span->setAttribute(self::STATUS_CODE_ATTRIBUTE, $statusCode);
                 $fullFilledSpan->setStatus(StatusCode::STATUS_OK, 'RetryFullFilled');
                 if (!$this->shouldRetry($request, $retries, $delaySecs, $response, $span)
                     || $this->exceedRetriesTimeLimit($delaySecs)) {
@@ -158,9 +163,11 @@ class RetryHandler
                 }
 
                 $retries = $this->getRetries($request);
-                $rejectedSpan->setAttribute('http.retry_count', $retries);
+                $rejectedSpan->setAttribute(self::RESEND_COUNT_ATTRIBUTE, $retries);
                 $delaySecs = $this->calculateDelay($retries, $reason->getResponse());
-                $rejectedSpan->setAttribute('delaySeconds', $delaySecs);
+                $rejectedSpan->setAttribute(self::RESEND_DELAY_ATTRIBUTE, $delaySecs);
+                $statusCode = $reason->getResponse()->getStatusCode();
+                $span->setAttribute(self::STATUS_CODE_ATTRIBUTE, $statusCode);
                 if (!$this->shouldRetry($request, $retries, $delaySecs, $reason->getResponse(), $span)
                     || $this->exceedRetriesTimeLimit($delaySecs)) {
                     Create::rejectionFor($reason);
