@@ -19,7 +19,7 @@ jobs:
         php-versions: ['7.4', '8.1', '8.2', '8.3']
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v4
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -29,7 +29,7 @@ jobs:
         run: composer install
       - name: Run static analysis
         run: ./vendor/bin/phpstan
-      - name: Run tests
+      - name: Run tests without coverage
         run: ./vendor/bin/phpunit
 
   code-coverage:
@@ -56,3 +56,17 @@ jobs:
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
             SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # The check-php-version-matrix returns success if all matrix jobs in build are successful; otherwise, it returns a failure.
+  # Use this as a PR status check for GitHub Policy Service instead of individual matrix entry checks.
+  check-php-version-matrix:
+    runs-on: ubuntu-latest
+    needs: [build, code-coverage]
+    if: always()
+    steps:
+      - name: All build matrix options are successful
+        if: ${{ !(contains(needs.*.result, 'failure')) }}
+        run: exit 0
+      - name: One or more build matrix options failed
+        if: ${{ contains(needs.*.result, 'failure') }}
+        run: exit 1
