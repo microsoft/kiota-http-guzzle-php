@@ -732,7 +732,7 @@ class GuzzleRequestAdapter implements RequestAdapter
     private function setHttpResponseAttributesInSpan(SpanInterface $span, ResponseInterface $response): void
     {
         $span->setAttribute('http.response.status_code', $response->getStatusCode());
-        $span->setAttribute('network.protocol.version', $response->getProtocolVersion());
+        $span->setAttribute('network.protocol.name', $response->getProtocolVersion());
         $span->setAttribute('http.response.header.content-type?', $response->getHeaderLine('Content-Type'));
     }
 
