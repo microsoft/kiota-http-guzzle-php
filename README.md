@@ -14,10 +14,12 @@ Read more about Kiota [here](https://github.com/microsoft/kiota/blob/main/README
 
 run `composer require microsoft/kiota-http-guzzle` or add the following to your `composer.json` file:
 
-```Shell
+```
 {
     "require": {
+        // x-release-please-start-version
         "microsoft/kiota-http-guzzle": "^1.1.0"
+        // x-release-please-end
     }
 }
 ```
