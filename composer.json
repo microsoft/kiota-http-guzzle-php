@@ -3,15 +3,6 @@
     "description": "Kiota HTTP Request Adapter implementation",
 	"version": "1.3.1",
     "type": "library",
-	"repositories": [
-		{
-			"type": "path",
-			"url": "../../abstractions",
-			"options": {
-				"symlink": false
-			}
-		}
-	],
 	"require": {
 		"php": "^7.4 || ^8.0",
 		"guzzlehttp/guzzle": "^7.4.5",
