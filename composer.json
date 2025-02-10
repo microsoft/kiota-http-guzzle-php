@@ -2,17 +2,17 @@
     "name": "microsoft/kiota-http-guzzle",
     "description": "Kiota HTTP Request Adapter implementation",
     "type": "library",
-	"require": {
-		"php": "^7.4 || ^8.0",
-		"guzzlehttp/guzzle": "^7.4.5",
-		"microsoft/kiota-abstractions": "^1.4.0",
-		"ext-zlib": "*",
-		"ext-json": "*"
-	},
+    "require": {
+        "php": "^7.4 || ^8.0",
+        "guzzlehttp/guzzle": "^7.4.5",
+        "microsoft/kiota-abstractions": "^1.5.0",
+        "ext-zlib": "*",
+        "ext-json": "*"
+    },
     "require-dev": {
         "phpunit/phpunit": "^9.6.22",
         "phpstan/phpstan": "^1.12.16"
-	},
+    },
     "license": "MIT",
     "authors": [
         {
@@ -20,16 +20,16 @@
             "email": "graphtooling@service.microsoft.com"
         }
     ],
-	"autoload": {
-		"psr-4": {
-			"Microsoft\\Kiota\\Http\\": "src/"
-		}
-	},
-	"autoload-dev": {
-		"psr-4": {
-			"Microsoft\\Kiota\\Http\\Test\\": "tests/"
-		}
-	},
+    "autoload": {
+        "psr-4": {
+            "Microsoft\\Kiota\\Http\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Microsoft\\Kiota\\Http\\Test\\": "tests/"
+        }
+    },
     "config": {
         "allow-plugins": {
             "php-http/discovery": false
