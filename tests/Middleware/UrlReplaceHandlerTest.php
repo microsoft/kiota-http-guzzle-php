@@ -87,7 +87,7 @@ class UrlReplaceHandlerTest extends TestCase
      * @return ResponseInterface
      * @throws GuzzleException
      */
-    private function executeMockRequest(array $mockResponses, ?UrlReplaceOption $decodingOption = null, string $url = null, array $requestOptions = []): ResponseInterface
+    private function executeMockRequest(array $mockResponses, ?UrlReplaceOption $decodingOption = null, ?string $url = null, array $requestOptions = []): ResponseInterface
     {
         $mockHandler = new MockHandler($mockResponses);
         $handlerStack = new HandlerStack($mockHandler);
