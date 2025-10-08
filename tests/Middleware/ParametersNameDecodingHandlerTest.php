@@ -113,7 +113,7 @@ class ParametersNameDecodingHandlerTest extends TestCase
         $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
     }
 
-    private function executeMockRequest(array $mockResponses, ?ParametersDecodingOption $decodingOption = null, string $url = null, array $requestOptions = []): ResponseInterface
+    private function executeMockRequest(array $mockResponses, ?ParametersDecodingOption $decodingOption = null, ?string $url = null, array $requestOptions = []): ResponseInterface
     {
         $mockHandler = new MockHandler($mockResponses);
         $handlerStack = new HandlerStack($mockHandler);

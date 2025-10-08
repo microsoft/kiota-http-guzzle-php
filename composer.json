@@ -5,7 +5,7 @@
     "require": {
         "php": "^7.4 || ^8.0",
         "guzzlehttp/guzzle": "^7.4.5",
-        "microsoft/kiota-abstractions": "^1.5.0",
+        "microsoft/kiota-abstractions": "^1.5.1",
         "ext-zlib": "*",
         "ext-json": "*"
     },
