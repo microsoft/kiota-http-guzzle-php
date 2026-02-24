@@ -3,9 +3,9 @@
     "description": "Kiota HTTP Request Adapter implementation",
     "type": "library",
     "require": {
-        "php": "^7.4 || ^8.0",
+        "php": "^8.2",
         "guzzlehttp/guzzle": "^7.4.5",
-        "microsoft/kiota-abstractions": "^1.5.2",
+        "microsoft/kiota-abstractions": "^2.0.0",
         "ext-zlib": "*",
         "ext-json": "*"
     },
