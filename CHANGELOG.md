@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.1.0...microsoft-kiota-http-guzzle-v2.1.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* decode query parameter names without rewriting the rest of the query ([#103](https://github.com/microsoft/kiota-php/issues/103)) ([657bb44](https://github.com/microsoft/kiota-php/commit/657bb4437a90b0faf92c619ee65fc72509d77c69))
+
 ## [2.1.0](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.0.2...microsoft-kiota-http-guzzle-v2.1.0) (2026-08-27)
 
 
