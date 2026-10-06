@@ -69,6 +69,10 @@ class CompressionOption implements RequestOption
             // Check if the request has a body
             if ($request->getBody()->getSize()) {
                 $compressedBody = gzencode($request->getBody()->getContents());
+                if ($compressedBody === false) {
+                    $request->getBody()->rewind();
+                    return $request;
+                }
                 return $request->withBody(Utils::streamFor($compressedBody))
                                 ->withAddedHeader('Content-Encoding', 'gzip');
             }
@@ -88,6 +92,10 @@ class CompressionOption implements RequestOption
             // Check if the request has a body
             if ($request->getBody()->getSize()) {
                 $compressedBody = gzdeflate($request->getBody()->getContents());
+                if ($compressedBody === false) {
+                    $request->getBody()->rewind();
+                    return $request;
+                }
                 return $request->withBody(Utils::streamFor($compressedBody))
                                 ->withAddedHeader('Content-Encoding', 'deflate');
             }

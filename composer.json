@@ -4,7 +4,7 @@
     "type": "library",
     "require": {
         "php": "^8.2",
-        "guzzlehttp/guzzle": "^7.4.5",
+        "guzzlehttp/guzzle": "^7.4.5 || ^8.0",
         "microsoft/kiota-abstractions": "^2.1.1",
         "ext-zlib": "*",
         "ext-json": "*"
