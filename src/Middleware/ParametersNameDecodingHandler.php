@@ -106,6 +106,7 @@ class ParametersNameDecodingHandler
      * @param string|null $original
      * @param array<string>|null $charactersToDecode
      * @return string
+     * @throws InvalidArgumentException
      */
     public static function decodeUriEncodedString(?string $original = null, ?array $charactersToDecode = null): string
     {
@@ -116,18 +117,21 @@ class ParametersNameDecodingHandler
         if (!$queryParams) {
             return $original;
         }
-        $queryParamKeyValues = [];
-        foreach (explode("&", $queryParams) as $nameValueString) {
-            $nameVal = explode("=", $nameValueString);
-            $queryParamKeyValues[$nameVal[0]] = $nameVal[1] ?? '';
-        }
         $encodingsToReplace = array_map(fn ($character) => "%".dechex(ord($character)), $charactersToDecode);
+        // the pairs are kept as a list, not a map: a parameter may legitimately appear more than
+        // once, and only the name is decoded - the value (which may itself contain "=") is untouched
         $decodedQueryParams = [];
-        foreach ($queryParamKeyValues as $key => $val) {
-            $decodedKey = str_ireplace($encodingsToReplace, $charactersToDecode, $key);
-            $decodedQueryParams [] = "{$decodedKey}={$val}";
+        foreach (explode("&", $queryParams) as $nameValueString) {
+            $nameVal = explode("=", $nameValueString, 2);
+            $decodedKey = str_ireplace($encodingsToReplace, $charactersToDecode, $nameVal[0]);
+            $decodedQueryParams[] = isset($nameVal[1]) ? "{$decodedKey}={$nameVal[1]}" : $decodedKey;
         }
-        /** @returns string $decodedUri */
-        return str_replace($queryParams, implode("&", $decodedQueryParams), $original);
+        // splice the decoded names back over the query component alone: the same text may
+        // also occur in the path, which a str_replace across the url would rewrite too
+        $queryStart = strpos($original, '?');
+        if ($queryStart === false) {
+            throw new InvalidArgumentException("parse_url reported a query for \"{$original}\" but it has no '?'");
+        }
+        return substr_replace($original, implode("&", $decodedQueryParams), $queryStart + 1, strlen($queryParams));
     }
 }

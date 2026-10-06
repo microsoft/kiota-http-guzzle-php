@@ -87,6 +87,45 @@ class ParametersNameDecodingHandlerTest extends TestCase
         $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
     }
 
+    public function testRepeatedQueryParametersAreKept()
+    {
+        $url = "https://abc.com/items?order=-createdAt&order=name&%24top=10";
+        $expected = "https://abc.com/items?order=-createdAt&order=name&\$top=10";
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
+    }
+
+    public function testQueryParamValueContainingEqualsSignIsKept()
+    {
+        $url = "https://abc.com/items?q=YWJjZA==&%24top=10";
+        $expected = "https://abc.com/items?q=YWJjZA==&\$top=10";
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
+    }
+
+    public function testPathSegmentEqualToQueryStringIsNotRewritten()
+    {
+        $url = "https://abc.com/%24top=10/items?%24top=10";
+        $expected = "https://abc.com/%24top=10/items?\$top=10";
+        $mockResponses = [
+            function (RequestInterface $request, $options) use ($expected) {
+                $this->assertEquals($expected, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+        $this->executeMockRequest($mockResponses, new ParametersDecodingOption(), $url);
+    }
+
     public function testDecodingWithoutQueryParametersInUrl()
     {
         $url = "https://abc.com#%24";

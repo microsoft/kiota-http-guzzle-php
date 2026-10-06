@@ -69,7 +69,7 @@ class RetryHandlerTest extends TestCase
     {
         $retryAfterSecs = 2;
         $mockResponses = [
-            new Response(429, ['Retry-After' => $retryAfterSecs]),
+            new Response(429, ['Retry-After' => (string)$retryAfterSecs]),
             function (RequestInterface $request, array $options) {
                 if (array_key_exists('delay', $options) && $options['delay'] > $this->testRetryOption->getDelay() * 1000) {
                     return new Response(200);
