@@ -9,6 +9,8 @@ use Psr\Http\Message\RequestInterface;
 
 class UrlReplaceHandler
 {
+    public const HANDLER_NAME = 'kiotaUrlReplaceHandler';
+
     private UrlReplaceOption $urlReplaceOptions;
 
     /**
@@ -36,30 +38,31 @@ class UrlReplaceHandler
 
     /**
      * @param RequestInterface $request
-     * @param array<string, RequestOption> $options
+     * @param array<string, mixed> $options
      * @return mixed
      */
 
     public function __invoke(RequestInterface $request, array $options)
     {
+        $urlReplaceOptions = $this->urlReplaceOptions;
         if (array_key_exists(UrlReplaceOption::class, $options) &&
             $options[UrlReplaceOption::class] instanceof UrlReplaceOption) {
-            $this->urlReplaceOptions = $options[UrlReplaceOption::class];
+            $urlReplaceOptions = $options[UrlReplaceOption::class];
         }
         $fn = $this->nextHandler;
-        if (!$this->getUrlReplaceOptions()->isEnabled() ||
-            empty($this->getUrlReplaceOptions()->getReplacementPairs())) {
+        if (!$urlReplaceOptions->isEnabled() ||
+            empty($urlReplaceOptions->getReplacementPairs())) {
             return $fn($request, $options);
         }
-        $request = $this->replaceUrlSegment($request);
+        $request = $this->replaceUrlSegment($request, $urlReplaceOptions);
         return $fn($request, $options);
     }
 
-    private function replaceUrlSegment(RequestInterface $request): RequestInterface
+    private function replaceUrlSegment(RequestInterface $request, UrlReplaceOption $urlReplaceOption): RequestInterface
     {
         $newUri = $request->getUri();
         $path = $newUri->getPath();
-        foreach ($this->getUrlReplaceOptions()->getReplacementPairs() as $key => $replacementValue) {
+        foreach ($urlReplaceOption->getReplacementPairs() as $key => $replacementValue) {
             $result = preg_replace('/'.urlencode($key).'/', urlencode($replacementValue), urlencode($path), 1);
 
             if (is_string($result)) {

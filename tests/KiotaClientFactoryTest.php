@@ -10,6 +10,7 @@ use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Constants;
 use Microsoft\Kiota\Http\KiotaClientFactory;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
+use Microsoft\Kiota\Http\Middleware\Options\UrlReplaceOption;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 
@@ -29,6 +30,36 @@ class KiotaClientFactoryTest extends TestCase
     public function testGetDefaultHandlerStack()
     {
         $this->assertInstanceOf(HandlerStack::class, KiotaClientFactory::getDefaultHandlerStack());
+    }
+
+    public function testDefaultHandlerStackIncludesUrlReplaceHandler(): void
+    {
+        $uri = 'https://graph.microsoft.com/users/test-user-id/messages';
+        $replacedUri = 'https://graph.microsoft.com/me/messages';
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use ($replacedUri) {
+                $this->assertSame($replacedUri, (string) $request->getUri());
+                return new Response(200);
+            },
+            function (RequestInterface $request) use ($uri) {
+                $this->assertSame($uri, (string) $request->getUri());
+                return new Response(200);
+            }
+        ]);
+        $middlewareStack = KiotaClientFactory::getDefaultHandlerStack();
+        $middlewareStack->setHandler($mockHandler);
+        $client = KiotaClientFactory::createWithMiddleware($middlewareStack);
+
+        // First request with UrlReplaceOption enabled replaces URL segment
+        $response1 = $client->get($uri, [
+            UrlReplaceOption::class => new UrlReplaceOption(true, ['/users/test-user-id' => '/me'])
+        ]);
+        $this->assertSame(200, $response1->getStatusCode());
+
+        // Subsequent request without UrlReplaceOption retains original URL without leaking options
+        $response2 = $client->get($uri);
+        $this->assertSame(200, $response2->getStatusCode());
+        $this->assertCount(0, $mockHandler);
     }
 
     /**
