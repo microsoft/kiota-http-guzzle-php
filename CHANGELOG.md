@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.2](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.2.1...microsoft-kiota-http-guzzle-v2.2.2) (2026-10-21)
+
+
+### Bug Fixes
+
+* **http:** add url replace handler to default middleware and avoid option leak ([#120](https://github.com/microsoft/kiota-php/issues/120)) ([44f8b73](https://github.com/microsoft/kiota-php/commit/44f8b73de25f52c55cb38f7305ee694ee1478624))
+
 ## [2.2.1](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.2.0...microsoft-kiota-http-guzzle-v2.2.1) (2026-10-08)
 
 
