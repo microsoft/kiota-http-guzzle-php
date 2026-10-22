@@ -67,4 +67,14 @@ class UserAgentHandlerTest extends TestCase
         $guzzleClient = new Client(['handler' => $handlerStack, 'http_errors' => false]);
         return $guzzleClient->get("/", $requestOptions);
     }
+
+    public function testConstructWithDefaultOption(): void
+    {
+        $nextHandler = function (RequestInterface $request, array $options) {
+            return new \GuzzleHttp\Promise\FulfilledPromise(new Response(200));
+        };
+        $handler = new \Microsoft\Kiota\Http\Middleware\UserAgentHandler($nextHandler);
+        $this->assertNotNull($handler);
+        $this->assertSame($nextHandler, $handler->getNextHandler());
+    }
 }

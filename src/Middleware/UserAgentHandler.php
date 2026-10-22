@@ -23,7 +23,7 @@ class UserAgentHandler
      * @param callable $nextHandler
      * @param UserAgentHandlerOption|null $agentHandlerOption
      */
-    public function __construct(callable $nextHandler, ?UserAgentHandlerOption $agentHandlerOption)
+    public function __construct(callable $nextHandler, ?UserAgentHandlerOption $agentHandlerOption = null)
     {
         $this->userAgentHandlerOption = $agentHandlerOption ?: new UserAgentHandlerOption();
         $this->nextHandler = $nextHandler;
