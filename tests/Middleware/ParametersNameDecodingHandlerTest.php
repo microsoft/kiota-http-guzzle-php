@@ -74,6 +74,40 @@ class ParametersNameDecodingHandlerTest extends TestCase
         $this->executeMockRequest($mockResponse, new ParametersDecodingOption(), $url, $requestOptions);
     }
 
+    public function testPerRequestOptionDoesNotLeakToSubsequentRequests(): void
+    {
+        $handlerOption = new ParametersDecodingOption();
+        $requestOption = new ParametersDecodingOption();
+        $requestOption->setEnabled(false);
+
+        $mockResponses = [
+            function (RequestInterface $request, array $options) {
+                $this->assertEquals($this->defaultUrl, strval($request->getUri()));
+                return new Response(200);
+            },
+            function (RequestInterface $request, array $options) {
+                $this->assertEquals($this->defaultDecodedUrl, strval($request->getUri()));
+                return new Response(200);
+            }
+        ];
+
+        $mockHandler = new MockHandler($mockResponses);
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::parameterNamesDecoding($handlerOption));
+        $client = new Client(['handler' => $handlerStack]);
+
+        // Request 1 with per-request option (disabled)
+        $client->get($this->defaultUrl, [
+            ParametersDecodingOption::class => $requestOption
+        ]);
+
+        // Default handler option should remain enabled
+        $this->assertTrue($handlerOption->isEnabled());
+
+        // Request 2 without options should use default handler option without leaking request 1's options
+        $client->get($this->defaultUrl);
+    }
+
     public function testQueryParamValuesNotDecoded()
     {
         $url = $this->defaultUrl."&key=%24top";

@@ -35,6 +35,7 @@ class ParametersNameDecodingHandler
      * Handler name to reference within the handler stack
      */
     public const HANDLER_NAME = "kiotaParameterNamesDecodingHandler";
+    private const SPAN_NAME = "ParametersNameDecodingHandler_invoke";
     /**
      * @var ParametersDecodingOption configuration for the middleware
      */
@@ -62,16 +63,17 @@ class ParametersNameDecodingHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        $span = ObservabilityOption::getTracer()->spanBuilder('ParametersNameDecodingHandler_invoke?')
+        $span = ObservabilityOption::getTracer()->spanBuilder(self::SPAN_NAME)
             ->startSpan();
         $scope = $span->activate();
         try {
             $span->setAttribute(self::PARAMETERS_DECODING_HANDLER_ENABLED, true);
+            $decodingOption = $this->decodingOption;
             // Request-level options override global options
             if (array_key_exists(ParametersDecodingOption::class, $options) && $options[ParametersDecodingOption::class] instanceof ParametersDecodingOption) {
-                $this->decodingOption = $options[ParametersDecodingOption::class];
+                $decodingOption = $options[ParametersDecodingOption::class];
             }
-            $request = $this->decodeQueryParameters($request, $span);
+            $request = $this->decodeQueryParameters($request, $span, $decodingOption);
             $fn  = $this->nextHandler;
             return $fn($request, $options);
         } finally {
@@ -83,19 +85,20 @@ class ParametersNameDecodingHandler
     /**
      * @param RequestInterface $request
      * @param SpanInterface $span
+     * @param ParametersDecodingOption $decodingOption
      * @return RequestInterface
      */
-    private function decodeQueryParameters(RequestInterface $request, SpanInterface $span): RequestInterface
+    private function decodeQueryParameters(RequestInterface $request, SpanInterface $span, ParametersDecodingOption $decodingOption): RequestInterface
     {
         $childSpan = ObservabilityOption::getTracer()->spanBuilder('decodeQueryParameters')
             ->setParent(Context::getCurrent())
             ->addLink($span->getContext())
             ->startSpan();
         try {
-            if (!$this->decodingOption->isEnabled() || !$this->decodingOption->getParametersToDecode()) {
+            if (!$decodingOption->isEnabled() || !$decodingOption->getParametersToDecode()) {
                 return $request;
             }
-            $decodedUri = self::decodeUriEncodedString($request->getUri(), $this->decodingOption->getParametersToDecode());
+            $decodedUri = self::decodeUriEncodedString($request->getUri(), $decodingOption->getParametersToDecode());
             return $request->withUri(new Uri($decodedUri));
         } finally {
             $childSpan->end();
