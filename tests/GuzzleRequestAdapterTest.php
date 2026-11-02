@@ -166,6 +166,26 @@ class GuzzleRequestAdapterTest extends TestCase
         }
     }
 
+    public function testSendAsyncWith304ResponseReturnsNull(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter([
+            new Response(304, ['Content-Type' => $this->contentType]),
+            new Response(304),
+        ]);
+        $this->assertNull($requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        $this->assertNull($requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+    }
+
+    public function testSendAsyncWith3XXResponseWithoutLocationReturnsNull(): void
+    {
+        foreach ([300, 301, 302, 303, 307, 308] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => $this->contentType]),
+            ]);
+            $this->assertNull($requestAdapter->sendAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
+    }
+
     public function testSendCollectionAsync(): void
     {
         $requestAdapter = $this->mockRequestAdapter([new Response(200, ['Content-Type' => $this->contentType])]);
@@ -182,6 +202,16 @@ class GuzzleRequestAdapterTest extends TestCase
             new Response(204, ['Content-Type' => $this->contentType]),
         ]);
         $this->assertNull($requestAdapter->sendCollectionAsync($this->requestInformation, array(TestUser::class, 'createFromDiscriminatorValue'))->wait());
+    }
+
+    public function testSendCollectionAsyncWith304And3XXWithoutLocationReturnsNull(): void
+    {
+        foreach ([304, 302] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => $this->contentType]),
+            ]);
+            $this->assertNull($requestAdapter->sendCollectionAsync($this->requestInformation, [TestUser::class, 'createFromDiscriminatorValue'])->wait());
+        }
     }
 
     public function testSendCollectionAsyncWithResponseHandler(): void
@@ -255,6 +285,24 @@ class GuzzleRequestAdapterTest extends TestCase
             new Response(204, ['Content-Type' => $this->contentType]),
         ]);
         $this->assertNull($requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait());
+    }
+
+    public function testSendPrimitiveAsyncWith304And3XXWithoutLocationReturnsNull(): void
+    {
+        foreach ([304, 302] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => $this->contentType]),
+            ]);
+            $this->assertNull($requestAdapter->sendPrimitiveAsync($this->requestInformation, 'int')->wait());
+        }
+    }
+
+    public function testSendPrimitiveAsyncStreamWith304ReturnsNull(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter([
+            new Response(304, ['Content-Type' => 'application/octet-stream']),
+        ]);
+        $this->assertNull($requestAdapter->sendPrimitiveAsync($this->requestInformation, StreamInterface::class)->wait());
     }
 
     public function testSendPrimitiveAsyncReturnsStream(): void
@@ -332,6 +380,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $this->assertNull($requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'int')->wait());
     }
 
+    public function testSendPrimitiveCollectionAsyncWith304And3XXWithoutLocationReturnsNull(): void
+    {
+        foreach ([304, 302] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => $this->contentType]),
+            ]);
+            $this->assertNull($requestAdapter->sendPrimitiveCollectionAsync($this->requestInformation, 'string')->wait());
+        }
+    }
+
     public function testSendPrimitiveCollectionAsyncWithCustomResponseHandlerWithWrongReturnTypeThrowsException(): void
     {
         $this->expectException(UnexpectedValueException::class);
@@ -360,6 +418,16 @@ class GuzzleRequestAdapterTest extends TestCase
         $requestAdapter = $this->mockRequestAdapter([new Response(204, ['Content-Type' => 'application/json'])]);
         $promise = $requestAdapter->sendNoContentAsync($this->requestInformation);
         $this->assertNull($promise->wait());
+    }
+
+    public function testSendNoContentAsyncWith304And3XXWithoutLocationReturnsNull(): void
+    {
+        foreach ([304, 302] as $statusCode) {
+            $requestAdapter = $this->mockRequestAdapter([
+                new Response($statusCode, ['Content-Type' => $this->contentType]),
+            ]);
+            $this->assertNull($requestAdapter->sendNoContentAsync($this->requestInformation)->wait());
+        }
     }
 
     public function testSendNoContentAsyncWithResponseHandler(): void
