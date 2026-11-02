@@ -36,13 +36,14 @@ class UserAgentHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
+        $userAgentHandlerOption = $this->userAgentHandlerOption;
         if (array_key_exists(UserAgentHandlerOption::class, $options) &&
             $options[UserAgentHandlerOption::class] instanceof UserAgentHandlerOption) {
-            $this->userAgentHandlerOption = $options[UserAgentHandlerOption::class];
+            $userAgentHandlerOption = $options[UserAgentHandlerOption::class];
         }
 
         /** @var RequestInterface $request */
-        $request = call_user_func($this->userAgentHandlerOption->getAgentConfigurator(), $request);
+        $request = call_user_func($userAgentHandlerOption->getAgentConfigurator(), $request);
         /** @var PromiseInterface $result */
         $result = call_user_func($this->getNextHandler(), $request, $options);
         return $result;

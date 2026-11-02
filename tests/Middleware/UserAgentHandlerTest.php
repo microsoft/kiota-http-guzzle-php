@@ -77,4 +77,42 @@ class UserAgentHandlerTest extends TestCase
         $this->assertNotNull($handler);
         $this->assertSame($nextHandler, $handler->getNextHandler());
     }
+
+    public function testRequestOptionsDoNotLeakAcrossRequests(): void
+    {
+        $defaultOption = new UserAgentHandlerOption();
+        $defaultOption->setProductName('DefaultProduct');
+        $defaultOption->setProductVersion('1.0.0');
+
+        $capturedHeaders = [];
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            },
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::userAgent($defaultOption));
+        $client = new Client(['handler' => $handlerStack]);
+
+        // Request 1: custom option supplied at request level
+        $customOption = new UserAgentHandlerOption();
+        $customOption->setProductName('CustomProduct');
+        $customOption->setProductVersion('2.0.0');
+
+        $client->get('/', [UserAgentHandlerOption::class => $customOption]);
+
+        // Request 2: executed without request-level options
+        $client->get('/');
+
+        $this->assertCount(2, $capturedHeaders);
+        $this->assertStringContainsString('CustomProduct/2.0.0', $capturedHeaders[0]);
+        $this->assertStringContainsString('DefaultProduct/1.0.0', $capturedHeaders[1]);
+        $this->assertStringNotContainsString('CustomProduct/2.0.0', $capturedHeaders[1]);
+    }
 }
