@@ -24,6 +24,8 @@ use Psr\Http\Message\RequestInterface;
  */
 class TelemetryHandler
 {
+    public const HANDLER_NAME = 'kiotaTelemetryHandler';
+
     /**
      * @var callable(RequestInterface, array<string, mixed>):PromiseInterface
      * Next handler in the handler stack
@@ -48,14 +50,33 @@ class TelemetryHandler
      */
     public function __invoke(RequestInterface $request, array $options): PromiseInterface
     {
-        // Request-level options override global options
+        // Request-level options override global options without mutating handler state
+        $telemetryOption = $this->telemetryOption;
         if (array_key_exists(TelemetryOption::class, $options) && $options[TelemetryOption::class] instanceof TelemetryOption) {
-            $this->telemetryOption = $options[TelemetryOption::class];
+            $telemetryOption = $options[TelemetryOption::class];
         }
-        if ($this->telemetryOption && $this->telemetryOption->getTelemetryConfigurator()) {
-            $request = $this->telemetryOption->getTelemetryConfigurator()($request);
+        if ($telemetryOption && $telemetryOption->getTelemetryConfigurator()) {
+            $request = $telemetryOption->getTelemetryConfigurator()($request);
         }
         $fn = $this->nextHandler;
         return $fn($request, $options);
+    }
+
+    /**
+     * Get the next request handler.
+     * @return callable(RequestInterface, array<string, mixed>): PromiseInterface
+     */
+    public function getNextHandler(): callable
+    {
+        return $this->nextHandler;
+    }
+
+    /**
+     * Get the default telemetry option.
+     * @return TelemetryOption|null
+     */
+    public function getTelemetryOption(): ?TelemetryOption
+    {
+        return $this->telemetryOption;
     }
 }

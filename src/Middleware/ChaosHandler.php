@@ -74,14 +74,15 @@ class ChaosHandler
         $scope = $span->activate();
         try {
             $span->setAttribute(self::CHAOS_HANDLER_ENABLED_KEY, true);
-            // Request-level options override global options
+            // Request-level options override global options without mutating handler state
+            $chaosOption = $this->chaosOption;
             if (array_key_exists(ChaosOption::class, $options) && $options[ChaosOption::class] instanceof ChaosOption) {
-                $this->chaosOption = $options[ChaosOption::class];
+                $chaosOption = $options[ChaosOption::class];
             }
 
             $randomPercentage = random_int(1, ChaosOption::MAX_CHAOS_PERCENTAGE);
-            if ($randomPercentage <= $this->chaosOption->getChaosPercentage()) {
-                $response = $this->randomChaosResponse($request, $options, $span);
+            if ($randomPercentage <= $chaosOption->getChaosPercentage()) {
+                $response = $this->randomChaosResponse($request, $options, $span, $chaosOption);
                 if ($response) {
                     return Create::promiseFor($response);
                 }
@@ -101,17 +102,19 @@ class ChaosHandler
      * @param RequestInterface $request
      * @param array<string, mixed> $options
      * @param SpanInterface $parentSpan
+     * @param ChaosOption|null $chaosOption
      * @return ResponseInterface|null
      * @throws Exception
      */
-    private function randomChaosResponse(RequestInterface $request, array $options, SpanInterface $parentSpan): ?ResponseInterface
+    private function randomChaosResponse(RequestInterface $request, array $options, SpanInterface $parentSpan, ?ChaosOption $chaosOption = null): ?ResponseInterface
     {
         $span = $this->tracer->spanBuilder('randomChaosResponse')
             ->setParent(Context::getCurrent())
             ->addLink($parentSpan->getContext())
             ->startSpan();
         try {
-            $chaosResponses = $this->chaosOption->getChaosResponses();
+            $chaosOption = $chaosOption ?: $this->chaosOption;
+            $chaosResponses = $chaosOption->getChaosResponses();
             if (empty($chaosResponses)) {
                 $chaosResponses = $this->getRandomResponsesByRequestMethod($request->getMethod(), $span);
             }

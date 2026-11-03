@@ -64,6 +64,58 @@ class HeadersInspectionHandlerTest extends TestCase
         $this->assertEquals(self::$responseHeaders, $option->getResponseHeaders()->getAll());
     }
 
+    public function testPerRequestOptionDoesNotLeakToSubsequentRequests(): void
+    {
+        $handlerOption = new HeadersInspectionHandlerOption(false, false);
+        $requestOption = new HeadersInspectionHandlerOption(true, true);
+        $secondRequestHeaders = [
+            'x-request-two' => ['second-request']
+        ];
+        $secondResponseHeaders = [
+            'x-response-two' => ['second-response']
+        ];
+        $mockResponses = [
+            new Response(200, self::$responseHeaders),
+            new Response(200, $secondResponseHeaders)
+        ];
+
+        $mockHandler = new MockHandler($mockResponses);
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::headersInspection($handlerOption));
+        $client = new Client(['handler' => $handlerStack, 'http_errors' => false]);
+
+        // Request 1 with per-request option enabled
+        $client->request('GET', '/', [
+            'headers' => self::$requestHeaders,
+            HeadersInspectionHandlerOption::class => $requestOption
+        ]);
+        $this->assertEquals(self::$requestHeaders, $requestOption->getRequestHeaders()->getAll());
+        $this->assertEquals(self::$responseHeaders, $requestOption->getResponseHeaders()->getAll());
+
+        // Default handler option should remain unmutated (disabled)
+        $this->assertEmpty($handlerOption->getRequestHeaders()->getAll());
+        $this->assertEmpty($handlerOption->getResponseHeaders()->getAll());
+
+        // Capture request 1's header objects before request 2
+        $initialRequestHeaders = $requestOption->getRequestHeaders();
+        $initialResponseHeaders = $requestOption->getResponseHeaders();
+
+        // Request 2 without options should use default handler option without leaking request 1's options
+        $client->request('GET', '/', [
+            'headers' => $secondRequestHeaders
+        ]);
+
+        // Default handler option should remain unmutated (disabled)
+        $this->assertEmpty($handlerOption->getRequestHeaders()->getAll());
+        $this->assertEmpty($handlerOption->getResponseHeaders()->getAll());
+
+        // Request 1's header objects must remain the same instances and not be overwritten by request 2
+        $this->assertSame($initialRequestHeaders, $requestOption->getRequestHeaders());
+        $this->assertSame($initialResponseHeaders, $requestOption->getResponseHeaders());
+        $this->assertEquals(self::$requestHeaders, $requestOption->getRequestHeaders()->getAll());
+        $this->assertEquals(self::$responseHeaders, $requestOption->getResponseHeaders()->getAll());
+    }
+
     private function executeMockRequest(array $mockResponses, ?HeadersInspectionHandlerOption $headersInspectionOption = null, ?array $requestOptions = []): ResponseInterface
     {
         $mockHandler = new MockHandler($mockResponses);

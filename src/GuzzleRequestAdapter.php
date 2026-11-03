@@ -159,7 +159,7 @@ class GuzzleRequestAdapter implements RequestAdapter
 
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     $span->setStatus(StatusCode::STATUS_OK, 'response_handle_success');
-                    if ($this->is204NoContentResponse($result)) {
+                    if ($this->isNoContentResponse($result)) {
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
@@ -229,7 +229,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                         );
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
-                    if ($this->is204NoContentResponse($result)) {
+                    if ($this->isNoContentResponse($result)) {
                         return null;
                     }
                     $rootNode = $this->getRootParseNode($result, $span);
@@ -269,7 +269,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
                     $this->setResponseType($primitiveType, $span);
-                    if ($this->is204NoContentResponse($result)) {
+                    if ($this->isNoContentResponse($result)) {
                         return null;
                     }
                     if ($primitiveType === StreamInterface::class) {
@@ -342,7 +342,7 @@ class GuzzleRequestAdapter implements RequestAdapter
                         );
                     }
                     $this->throwFailedResponse($result, $errorMappings, $span);
-                    if ($this->is204NoContentResponse($result)) {
+                    if ($this->isNoContentResponse($result)) {
                         return null;
                     }
                     $rootParseNode = $this->getRootParseNode($result, $span);
@@ -702,12 +702,18 @@ class GuzzleRequestAdapter implements RequestAdapter
     }
 
     /**
+     * Determines whether the response represents a no-content response (such as 204 No Content,
+     * 304 Not Modified, or a 3XX response without a Location header) that should return null.
+     *
      * @param ResponseInterface $response
      * @return bool
      */
-    private function is204NoContentResponse(ResponseInterface $response): bool
+    private function isNoContentResponse(ResponseInterface $response): bool
     {
-        return $response->getStatusCode() === 204;
+        $statusCode = $response->getStatusCode();
+        return $statusCode === 204
+            || $statusCode === 304
+            || ($statusCode >= 300 && $statusCode < 400 && !$response->hasHeader('Location'));
     }
     private const QUERY_PARAMETERS_CLEANUP_REGEX = "/\{+?[^}]+}/";
 

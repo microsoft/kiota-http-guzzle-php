@@ -29,7 +29,7 @@ use Psr\Http\Message\ResponseInterface;
 class HeadersInspectionHandler
 {
     public const HANDLER_NAME = "kiotaHeadersInspectionHandler";
-    private const SPAN_NAME = "HeadersInspectionHandler_invoke?";
+    private const SPAN_NAME = "HeadersInspectionHandler_invoke";
     private const HANDLER_ENABLED_KEY = "com.microsoft.kiota.handler.headers_inspection.enable";
 
     /**
@@ -70,28 +70,29 @@ class HeadersInspectionHandler
         $span->setAttribute(self::HANDLER_ENABLED_KEY, true);
 
         try {
+            $headersInspectionOption = $this->headersInspectionOption;
             if (array_key_exists(HeadersInspectionHandlerOption::class, $options)
                 && $options[HeadersInspectionHandlerOption::class] instanceof HeadersInspectionHandlerOption
             ) {
-                $this->headersInspectionOption = $options[HeadersInspectionHandlerOption::class];
+                $headersInspectionOption = $options[HeadersInspectionHandlerOption::class];
             }
 
-            if ($this->headersInspectionOption->isInspectRequestHeaders()) {
+            if ($headersInspectionOption->isInspectRequestHeaders()) {
                 $requestHeaders = new RequestHeaders();
                 $requestHeaders->putAll($request->getHeaders());
-                $this->headersInspectionOption->setRequestHeaders($requestHeaders);
+                $headersInspectionOption->setRequestHeaders($requestHeaders);
             }
 
             $fn = $this->nextHandler;
             return $fn($request, $options)->then(
-                function (?ResponseInterface $response) {
+                function (?ResponseInterface $response) use ($headersInspectionOption) {
                     if (!$response) {
                         return $response;
                     }
-                    if ($this->headersInspectionOption->isInspectResponseHeaders()) {
+                    if ($headersInspectionOption->isInspectResponseHeaders()) {
                         $responseHeaders = new RequestHeaders();
                         $responseHeaders->putAll($response->getHeaders());
-                        $this->headersInspectionOption->setResponseHeaders($responseHeaders);
+                        $headersInspectionOption->setResponseHeaders($responseHeaders);
                     }
                     return $response;
                 }

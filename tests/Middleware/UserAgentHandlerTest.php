@@ -67,4 +67,52 @@ class UserAgentHandlerTest extends TestCase
         $guzzleClient = new Client(['handler' => $handlerStack, 'http_errors' => false]);
         return $guzzleClient->get("/", $requestOptions);
     }
+
+    public function testConstructWithDefaultOption(): void
+    {
+        $nextHandler = function (RequestInterface $request, array $options) {
+            return new \GuzzleHttp\Promise\FulfilledPromise(new Response(200));
+        };
+        $handler = new \Microsoft\Kiota\Http\Middleware\UserAgentHandler($nextHandler);
+        $this->assertNotNull($handler);
+        $this->assertSame($nextHandler, $handler->getNextHandler());
+    }
+
+    public function testRequestOptionsDoNotLeakAcrossRequests(): void
+    {
+        $defaultOption = new UserAgentHandlerOption();
+        $defaultOption->setProductName('DefaultProduct');
+        $defaultOption->setProductVersion('1.0.0');
+
+        $capturedHeaders = [];
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            },
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::userAgent($defaultOption));
+        $client = new Client(['handler' => $handlerStack]);
+
+        // Request 1: custom option supplied at request level
+        $customOption = new UserAgentHandlerOption();
+        $customOption->setProductName('CustomProduct');
+        $customOption->setProductVersion('2.0.0');
+
+        $client->get('/', [UserAgentHandlerOption::class => $customOption]);
+
+        // Request 2: executed without request-level options
+        $client->get('/');
+
+        $this->assertCount(2, $capturedHeaders);
+        $this->assertStringContainsString('CustomProduct/2.0.0', $capturedHeaders[0]);
+        $this->assertStringContainsString('DefaultProduct/1.0.0', $capturedHeaders[1]);
+        $this->assertStringNotContainsString('CustomProduct/2.0.0', $capturedHeaders[1]);
+    }
 }

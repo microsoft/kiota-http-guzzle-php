@@ -78,14 +78,15 @@ class CompressionHandler
         $scope = $span->activate();
         try {
             $span->setAttribute(self::COMPRESSION_HANDLER_ENABLED_KEY, true);
-            // Request-level options override global options
+            // Request-level options override global options without mutating handler state
+            $compressionOption = $this->compressionOption;
             if (array_key_exists(CompressionOption::class, $options) && $options[CompressionOption::class] instanceof CompressionOption) {
-                $this->compressionOption = $options[CompressionOption::class];
+                $compressionOption = $options[CompressionOption::class];
             }
 
             $this->originalRequest = $request; // keep reference in case we have to retry with uncompressed body
             if (!$this->isRetryAttempt($options)) {
-                $request = $this->compress($request);
+                $request = $this->compress($request, $compressionOption);
                 $options['curl'] = [\CURLOPT_ENCODING => '']; // Allow curl to add the Accept-Encoding header with all the de-compression methods it supports
             }
             $fn = $this->nextHandler;
@@ -174,11 +175,13 @@ class CompressionHandler
      * Applies compression callbacks provided in {@link CompressionOption} to the request
      *
      * @param RequestInterface $request
+     * @param CompressionOption|null $compressionOption
      * @return RequestInterface
      */
-    private function compress(RequestInterface $request): RequestInterface
+    private function compress(RequestInterface $request, ?CompressionOption $compressionOption = null): RequestInterface
     {
-        foreach ($this->compressionOption->getCallbacks() as $callback) {
+        $compressionOption = $compressionOption ?: $this->compressionOption;
+        foreach ($compressionOption->getCallbacks() as $callback) {
             $request = $callback($request);
         }
         return $request;

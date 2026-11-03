@@ -52,6 +52,22 @@ class ChaosHandlerTest extends TestCase
         $this->assertTrue($chaosResponse->getStatusCode() == 300);
     }
 
+    public function testPerRequestOptionDoesNotLeakToSubsequentRequests(): void
+    {
+        $defaultOption = new ChaosOption([], 0);
+        $customOption = new ChaosOption([new Response(500)], 100);
+
+        $chaosClient = $this->getChaosClient($defaultOption);
+
+        // Request 1 with custom per-request option (100% chaos -> returns 500)
+        $response1 = $chaosClient->get('/', [ChaosOption::class => $customOption]);
+        $this->assertEquals(500, $response1->getStatusCode());
+
+        // Request 2 without options should use default handler option (0% chaos -> returns 200 from mock handler)
+        $response2 = $chaosClient->get('/');
+        $this->assertEquals(200, $response2->getStatusCode());
+    }
+
     private function getChaosClient(ChaosOption $chaosOption): Client
     {
         $mockHandler = new MockHandler([
