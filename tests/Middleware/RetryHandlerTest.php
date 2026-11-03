@@ -214,6 +214,54 @@ class RetryHandlerTest extends TestCase
         $this->assertEquals(429, $response->getStatusCode());
     }
 
+    public function testPerRequestOptionDoesNotLeakToSubsequentRequests(): void
+    {
+        $defaultOption = new RetryOption(3, 1);
+        $customOption = new RetryOption(0, 1);
+
+        $mockResponses = [
+            new Response(429),
+            new Response(503),
+            new Response(200)
+        ];
+        $mockHandler = new MockHandler($mockResponses);
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::retry($defaultOption));
+        $client = new Client(['handler' => $handlerStack, 'http_errors' => false]);
+
+        // Request 1 with custom per-request option (0 retries -> returns 429)
+        $response1 = $client->get('/', [RetryOption::class => $customOption]);
+        $this->assertEquals(429, $response1->getStatusCode());
+
+        // Request 2 without options should use default handler option (3 retries -> retries 503 and gets 200)
+        $response2 = $client->get('/');
+        $this->assertEquals(200, $response2->getStatusCode());
+    }
+
+    public function testBadResponseExceptionWithZeroRetriesDoesNotRetry(): void
+    {
+        $zeroRetryOption = new RetryOption(0, 1);
+        $originalRequest = new Request("GET", "/");
+        $mockResponses = [
+            new BadResponseException("429 returned", $originalRequest, new Response(429)),
+            new Response(200)
+        ];
+        $mockHandler = new MockHandler($mockResponses);
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::retry($this->testRetryOption));
+        $client = new Client(['handler' => $handlerStack, 'http_errors' => true]);
+
+        try {
+            $client->get('/', [RetryOption::class => $zeroRetryOption]);
+            $this->fail("Expected BadResponseException was not thrown");
+        } catch (BadResponseException $ex) {
+            $this->assertEquals("429 returned", $ex->getMessage());
+            $this->assertEquals(429, $ex->getResponse()->getStatusCode());
+        }
+
+        $this->assertEquals(1, $mockHandler->count());
+    }
+
 
     private function executeMockRequestWithRetryHandler(array $mockResponses, ?RetryOption $retryOption = null, ?array $requestOptions = []) : ResponseInterface
     {
