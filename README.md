@@ -18,7 +18,7 @@ run `composer require microsoft/kiota-http-guzzle` or add the following to your 
 {
     "require": {
         // x-release-please-start-version
-        "microsoft/kiota-http-guzzle": "^2.2.2"
+        "microsoft/kiota-http-guzzle": "^2.2.3"
         // x-release-please-end
     }
 }
