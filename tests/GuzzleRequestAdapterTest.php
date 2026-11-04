@@ -38,7 +38,7 @@ class GuzzleRequestAdapterTest extends TestCase
     private ParseNodeFactory $parseNodeFactory;
     private AuthenticationProvider $authenticationProvider;
     private RequestInformation $requestInformation;
-    private string $baseUrl = "https:/graph.microsoft.com";
+    private string $baseUrl = "https://graph.microsoft.com";
     private string $contentType = "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8";
 
     protected function setUp(): void
@@ -84,10 +84,11 @@ class GuzzleRequestAdapterTest extends TestCase
     private function mockAuthenticationProvider(): void
     {
         $this->authenticationProvider = $this->createStub(AuthenticationProvider::class);
-        $authenticatedRequest = $this->requestInformation;
-        $authenticatedRequest->addHeader('Bearer', 'token');
         $this->authenticationProvider->method('authenticateRequest')
-                                    ->willReturn(new FulfilledPromise($authenticatedRequest));
+            ->willReturnCallback(function (RequestInformation $request) {
+                $request->addHeader('Bearer', 'token');
+                return new FulfilledPromise($request);
+            });
     }
 
     private function mockRequestAdapter(array $mockResponses = []): GuzzleRequestAdapter
@@ -570,6 +571,100 @@ class GuzzleRequestAdapterTest extends TestCase
         $this->assertEquals('GET', $request->getMethod());
         $this->assertEquals($this->baseUrl, strval($request->getUri()));
         $this->assertEquals('body', $request->getBody()->getContents());
+    }
+
+    public function testConvertToNativeWithUrlTemplateContainingBaseUrl(): void
+    {
+        $authCalled = false;
+        $authenticationProvider = $this->createMock(AuthenticationProvider::class);
+        $authenticationProvider->expects($this->once())
+            ->method('authenticateRequest')
+            ->willReturnCallback(function (RequestInformation $request) use (&$authCalled) {
+                $authCalled = true;
+                $this->assertEquals($this->baseUrl . '/users', $request->getUri());
+                $request->addHeader('Bearer', 'token');
+                return new FulfilledPromise($request);
+            });
+
+        $requestAdapter = new GuzzleRequestAdapter(
+            $authenticationProvider,
+            $this->parseNodeFactory,
+            $this->createMock(SerializationWriterFactory::class),
+            new Client(['handler' => new MockHandler([])])
+        );
+        $requestAdapter->setBaseUrl($this->baseUrl);
+
+        $requestInfo = new RequestInformation();
+        $requestInfo->httpMethod = 'GET';
+        $requestInfo->urlTemplate = '{+baseurl}/users';
+        $request = $requestAdapter->convertToNative($requestInfo)->wait();
+        $this->assertTrue($authCalled);
+        $this->assertInstanceOf(RequestInterface::class, $request);
+        $this->assertEquals($this->baseUrl . '/users', strval($request->getUri()));
+    }
+
+    public function testConvertToNativePreservesExistingPathParametersBaseUrl(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $this->assertNotEmpty($requestAdapter->getBaseUrl());
+        $requestInfo = new RequestInformation();
+        $requestInfo->httpMethod = 'GET';
+        $requestInfo->urlTemplate = '{+baseurl}/me';
+        $requestInfo->pathParameters['baseurl'] = 'https://custom.endpoint.com';
+        $request = $requestAdapter->convertToNative($requestInfo)->wait();
+        $this->assertInstanceOf(RequestInterface::class, $request);
+        $this->assertEquals('https://custom.endpoint.com/me', strval($request->getUri()));
+    }
+
+    public function testGetPsrRequestPreservesExistingPathParametersBaseUrl(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $this->assertNotEmpty($requestAdapter->getBaseUrl());
+        $requestInfo = new RequestInformation();
+        $requestInfo->httpMethod = 'GET';
+        $requestInfo->urlTemplate = '{+baseurl}/users';
+        $requestInfo->pathParameters['baseurl'] = 'https://custom.endpoint.com';
+
+        $psrRequest = $requestAdapter->getPsrRequestFromRequestInformation($requestInfo);
+        $this->assertEquals('https://custom.endpoint.com/users', strval($psrRequest->getUri()));
+    }
+
+    public function testConvertToNativeUsesAdapterBaseUrlWhenPathParametersBaseUrlEmpty(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $requestInfo = new RequestInformation();
+        $requestInfo->httpMethod = 'GET';
+        $requestInfo->urlTemplate = '{+baseurl}/users';
+        $requestInfo->pathParameters['baseurl'] = '';
+
+        $request = $requestAdapter->convertToNative($requestInfo)->wait();
+        $this->assertInstanceOf(RequestInterface::class, $request);
+        $this->assertEquals($this->baseUrl . '/users', strval($request->getUri()));
+    }
+
+    public function testGetPsrRequestSetsServerAddressAttributeToHost(): void
+    {
+        $requestAdapter = $this->mockRequestAdapter();
+        $requestInfo = new RequestInformation();
+        $requestInfo->httpMethod = 'GET';
+        $requestInfo->urlTemplate = '{+baseurl}/messages';
+
+        $span = $this->createMock(\OpenTelemetry\API\Trace\SpanInterface::class);
+        $spanContext = $this->createMock(\OpenTelemetry\API\Trace\SpanContextInterface::class);
+        $span->method('getContext')->willReturn($spanContext);
+
+        $capturedAttributes = [];
+        $span->expects($this->atLeastOnce())
+            ->method('setAttribute')
+            ->willReturnCallback(function ($key, $value) use (&$capturedAttributes, $span) {
+                $capturedAttributes[$key] = $value;
+                return $span;
+            });
+
+        $psrRequest = $requestAdapter->getPsrRequestFromRequestInformation($requestInfo, $span);
+        $this->assertInstanceOf(RequestInterface::class, $psrRequest);
+        $this->assertArrayHasKey('server.address', $capturedAttributes);
+        $this->assertEquals('graph.microsoft.com', $capturedAttributes['server.address']);
     }
 
 }
