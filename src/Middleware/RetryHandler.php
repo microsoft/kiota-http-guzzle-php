@@ -205,7 +205,8 @@ class RetryHandler
         $shouldRetryValue = ((($retries < $retryOption->getMaxRetries())
                     && $this->isPayloadRewindable($request)
                     && ($response && $retryOption->getShouldRetry()($delaySecs, $retries, $response))
-                    && $this->isRetryStatusCode($response->getStatusCode())) || !$response
+                    && $this->isRetryStatusCode($response->getStatusCode())
+                    && $this->isRetriableForMethod($request, $response, $retryOption)) || !$response
         );
         $span->setAttribute('shouldRetry', $shouldRetryValue);
         return $shouldRetryValue;
@@ -279,6 +280,31 @@ class RetryHandler
     private function isRetryStatusCode(int $httpStatusCode): bool
     {
         return ($httpStatusCode == 429 || $httpStatusCode == 503 || $httpStatusCode == 504);
+    }
+
+    /**
+     * Returns true if the response allows resending the request, given its method.
+     * With retryUnprocessedMutationsOnly set, POST and PATCH requests are retried only after a response
+     * showing the server didn't process them, because a 504 may arrive after the server already acted on the request.
+     *
+     * @param RequestInterface $request
+     * @param ResponseInterface $response
+     * @param RetryOption $retryOption
+     * @return bool
+     */
+    private function isRetriableForMethod(RequestInterface $request, ResponseInterface $response, RetryOption $retryOption): bool
+    {
+        if (!$retryOption->getRetryUnprocessedMutationsOnly()) {
+            return true;
+        }
+        $method = strtoupper($request->getMethod());
+        if ($method !== 'POST' && $method !== 'PATCH') {
+            return true;
+        }
+        // By common service convention, a 429 or 503 means the server didn't process the request,
+        // so resending it is treated as safe.
+        $statusCode = $response->getStatusCode();
+        return ($statusCode == 429 || $statusCode == 503);
     }
 
     /**
