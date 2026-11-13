@@ -359,6 +359,41 @@ class RetryHandlerTest extends TestCase
         $this->assertEquals(['POST', 'POST'], $methods);
     }
 
+    /**
+     * @dataProvider nonIdempotentMethods
+     */
+    public function testNonIdempotentRequestRetriedOnGatewayTimeoutExceptionByDefault(string $method)
+    {
+        [$response, $methods] = $this->sendWithStatusesAsExceptions(new RetryOption(3, 0), $method, [504]);
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertCount(2, $methods);
+    }
+
+    /**
+     * @dataProvider nonIdempotentMethods
+     */
+    public function testNonIdempotentRequestNotRetriedOnGatewayTimeoutExceptionWhenEnabled(string $method)
+    {
+        $methods = [];
+        try {
+            $this->sendWithStatusesAsExceptions($this->retryUnprocessedMutationsOnlyOption(), $method, [504], $methods);
+            $this->fail('Expected the 504 to be raised as an exception');
+        } catch (BadResponseException $exception) {
+            $this->assertEquals(504, $exception->getResponse()->getStatusCode());
+        }
+        $this->assertCount(1, $methods);
+    }
+
+    /**
+     * @dataProvider nonIdempotentMethodsAndUnprocessedStatuses
+     */
+    public function testNonIdempotentRequestRetriedOnUnprocessedExceptionWhenEnabled(string $method, int $statusCode)
+    {
+        [$response, $methods] = $this->sendWithStatusesAsExceptions($this->retryUnprocessedMutationsOnlyOption(), $method, [$statusCode]);
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertCount(2, $methods);
+    }
+
     public function nonIdempotentMethods(): array
     {
         return [['POST'], ['PATCH']];
@@ -404,6 +439,34 @@ class RetryHandlerTest extends TestCase
         $guzzleClient = new Client(['handler' => $handlerStack, 'http_errors' => false]);
         $response = $guzzleClient->request($method, '/send', array_merge(['body' => '{"message":"hello"}'], $requestOptions));
         return [$response, array_map(fn (array $transaction) => $transaction['request']->getMethod(), $history)];
+    }
+
+    /**
+     * Like {@link sendWithStatuses()}, but with Guzzle's http_errors middleware below the retry handler,
+     * so 4xx and 5xx responses reach it as a {@link BadResponseException}, as with a default Guzzle client.
+     *
+     * @param RetryOption $retryOption
+     * @param string $method
+     * @param int[] $statusCodes
+     * @param string[] $methods receives the method of every request sent
+     * @return array{ResponseInterface, string[]}
+     */
+    private function sendWithStatusesAsExceptions(RetryOption $retryOption, string $method, array $statusCodes, array &$methods = []): array
+    {
+        $mockResponses = array_map(fn (int $statusCode) => new Response($statusCode), $statusCodes);
+        $mockResponses[] = new Response(200);
+        $history = [];
+        $handlerStack = new HandlerStack(new MockHandler($mockResponses));
+        $handlerStack->push(KiotaMiddleware::retry($retryOption));
+        $handlerStack->push(Middleware::history($history));
+        $handlerStack->push(Middleware::httpErrors());
+        $guzzleClient = new Client(['handler' => $handlerStack]);
+        try {
+            $response = $guzzleClient->request($method, '/send', ['body' => '{"message":"hello"}']);
+        } finally {
+            $methods = array_map(fn (array $transaction) => $transaction['request']->getMethod(), $history);
+        }
+        return [$response, $methods];
     }
 
     /**
