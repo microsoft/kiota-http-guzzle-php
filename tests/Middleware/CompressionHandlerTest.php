@@ -5,6 +5,7 @@ namespace Microsoft\Kiota\Http\Test\Middleware;
 use GuzzleHttp\Client;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Promise\Utils;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Middleware\KiotaMiddleware;
 use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
@@ -130,6 +131,67 @@ class CompressionHandlerTest extends TestCase
         $this->assertEquals('gzip', $receivedEncodings[0]);
         $this->assertEmpty($receivedEncodings[1]);
         $this->assertEquals($payload, $receivedBodies[1]);
+    }
+
+    public function testConcurrentRequestsDoNotContaminateEachOtherOnRetry(): void
+    {
+        $recordedRequests = [];
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$recordedRequests) {
+                // Request A (first attempt) -> 415
+                $recordedRequests[] = [
+                    'uri' => (string) $request->getUri(),
+                    'encoding' => $request->getHeaderLine('Content-Encoding'),
+                    'body' => $request->getBody()->getContents()
+                ];
+                return new Response(415);
+            },
+            function (RequestInterface $request) use (&$recordedRequests) {
+                // Request B (first attempt) -> 200
+                $recordedRequests[] = [
+                    'uri' => (string) $request->getUri(),
+                    'encoding' => $request->getHeaderLine('Content-Encoding'),
+                    'body' => $request->getBody()->getContents()
+                ];
+                return new Response(200);
+            },
+            function (RequestInterface $request) use (&$recordedRequests) {
+                // Request A (retry attempt) -> 200
+                $recordedRequests[] = [
+                    'uri' => (string) $request->getUri(),
+                    'encoding' => $request->getHeaderLine('Content-Encoding'),
+                    'body' => $request->getBody()->getContents()
+                ];
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::compression());
+        $client = new Client(['handler' => $handlerStack, 'http_errors' => false]);
+
+        $promiseA = $client->postAsync('https://example.com/endpoint-a', ['body' => 'PAYLOAD_A']);
+        $promiseB = $client->postAsync('https://example.com/endpoint-b', ['body' => 'PAYLOAD_B']);
+
+        $results = Utils::settle([$promiseA, $promiseB])->wait();
+
+        $this->assertEquals(200, $results[0]['value']->getStatusCode());
+        $this->assertEquals(200, $results[1]['value']->getStatusCode());
+
+        $this->assertCount(3, $recordedRequests);
+
+        // First was Request A to endpoint-a
+        $this->assertEquals('https://example.com/endpoint-a', $recordedRequests[0]['uri']);
+        $this->assertEquals('gzip', $recordedRequests[0]['encoding']);
+
+        // Second was Request B to endpoint-b
+        $this->assertEquals('https://example.com/endpoint-b', $recordedRequests[1]['uri']);
+        $this->assertEquals('gzip', $recordedRequests[1]['encoding']);
+
+        // Third was Request A retrying uncompressed to endpoint-a with PAYLOAD_A (no leak of endpoint-b or PAYLOAD_B)
+        $this->assertEquals('https://example.com/endpoint-a', $recordedRequests[2]['uri']);
+        $this->assertEmpty($recordedRequests[2]['encoding']);
+        $this->assertEquals('PAYLOAD_A', $recordedRequests[2]['body']);
     }
 
     public function testMultipleCompressionCallbacks()
