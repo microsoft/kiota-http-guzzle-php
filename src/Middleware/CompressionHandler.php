@@ -125,7 +125,7 @@ class CompressionHandler
                 ->startSpan();
             try {
                 if ($response->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                    if ($originalRequest->getBody()->isSeekable()) {
+                    if ($this->isPayloadRewindable($originalRequest)) {
                         $originalRequest->getBody()->rewind();
                         $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
                         $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, 1);
@@ -160,7 +160,7 @@ class CompressionHandler
                 if (is_a($reason, BadResponseException::class)) {
                     $span->recordException($reason);
                     if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                        if ($originalRequest->getBody()->isSeekable()) {
+                        if ($this->isPayloadRewindable($originalRequest)) {
                             $originalRequest->getBody()->rewind();
                             $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
                             return $this($originalRequest, $options);
@@ -172,6 +172,17 @@ class CompressionHandler
                 $span->end();
             }
         };
+    }
+
+    /**
+     * Checks if the request body payload can be rewound
+     *
+     * @param RequestInterface $request
+     * @return bool
+     */
+    private function isPayloadRewindable(RequestInterface $request): bool
+    {
+        return $request->getBody()->isSeekable();
     }
 
     /**
