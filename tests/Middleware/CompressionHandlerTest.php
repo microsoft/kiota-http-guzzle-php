@@ -102,6 +102,36 @@ class CompressionHandlerTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
+    public function testUncompressedBodyPreservedOnBadResponseException415Retry(): void
+    {
+        $payload = "PAYLOAD_RECOVERED_AFTER_BAD_RESPONSE_EXCEPTION";
+        $receivedBodies = [];
+        $receivedEncodings = [];
+
+        $mockResponse = [
+            function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
+                $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
+                $receivedBodies[] = $request->getBody()->getContents();
+                return new Response(415);
+            },
+            function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
+                $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
+                $receivedBodies[] = $request->getBody()->getContents();
+                return new Response(200);
+            }
+        ];
+
+        $response = $this->executeMockRequest($mockResponse, null, [
+            'body' => $payload,
+            'http_errors' => true
+        ]);
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertCount(2, $receivedBodies);
+        $this->assertEquals('gzip', $receivedEncodings[0]);
+        $this->assertEmpty($receivedEncodings[1]);
+        $this->assertEquals($payload, $receivedBodies[1]);
+    }
+
     public function testMultipleCompressionCallbacks()
     {
         $body = "payload";
