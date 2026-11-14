@@ -3,9 +3,12 @@
 namespace Microsoft\Kiota\Http\Test\Middleware;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\Exception\BadResponseException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Promise\Utils;
+use GuzzleHttp\Psr7\NoSeekStream;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Middleware\KiotaMiddleware;
 use Microsoft\Kiota\Http\Middleware\Options\CompressionOption;
@@ -109,12 +112,12 @@ class CompressionHandlerTest extends TestCase
         $receivedBodies = [];
         $receivedEncodings = [];
 
+        $req = new Request('POST', 'https://example.com');
+        $res415 = new Response(415);
+        $exception = new BadResponseException('Unsupported Media Type', $req, $res415);
+
         $mockResponse = [
-            function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
-                $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
-                $receivedBodies[] = $request->getBody()->getContents();
-                return new Response(415);
-            },
+            $exception,
             function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
                 $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
                 $receivedBodies[] = $request->getBody()->getContents();
@@ -127,10 +130,9 @@ class CompressionHandlerTest extends TestCase
             'http_errors' => true
         ]);
         $this->assertEquals(200, $response->getStatusCode());
-        $this->assertCount(2, $receivedBodies);
-        $this->assertEquals('gzip', $receivedEncodings[0]);
-        $this->assertEmpty($receivedEncodings[1]);
-        $this->assertEquals($payload, $receivedBodies[1]);
+        $this->assertCount(1, $receivedBodies);
+        $this->assertEmpty($receivedEncodings[0]);
+        $this->assertEquals($payload, $receivedBodies[0]);
     }
 
     public function testConcurrentRequestsDoNotContaminateEachOtherOnRetry(): void
@@ -192,6 +194,57 @@ class CompressionHandlerTest extends TestCase
         $this->assertEquals('https://example.com/endpoint-a', $recordedRequests[2]['uri']);
         $this->assertEmpty($recordedRequests[2]['encoding']);
         $this->assertEquals('PAYLOAD_A', $recordedRequests[2]['body']);
+    }
+
+    public function testNonSeekableBodySkips415Retry(): void
+    {
+        $nonSeekableStream = new NoSeekStream(\GuzzleHttp\Psr7\Utils::streamFor("NON_SEEKABLE_PAYLOAD"));
+        $requestCount = 0;
+
+        $mockResponse = [
+            function (RequestInterface $request) use (&$requestCount) {
+                $requestCount++;
+                return new Response(415);
+            },
+            function (RequestInterface $request) use (&$requestCount) {
+                $requestCount++;
+                return new Response(200);
+            }
+        ];
+
+        $response = $this->executeMockRequest($mockResponse, null, ['body' => $nonSeekableStream]);
+
+        // Handler should not retry because stream is not seekable; 415 response is returned immediately
+        $this->assertEquals(415, $response->getStatusCode());
+        $this->assertEquals(1, $requestCount);
+    }
+
+    public function testNonSeekableBodySkips415RetryOnBadResponseException(): void
+    {
+        $nonSeekableStream = new NoSeekStream(\GuzzleHttp\Psr7\Utils::streamFor("NON_SEEKABLE_PAYLOAD"));
+        $retryExecuted = false;
+
+        $req = new Request('POST', 'https://example.com');
+        $res415 = new Response(415);
+        $exception = new BadResponseException('Unsupported Media Type', $req, $res415);
+
+        $mockResponse = [
+            $exception,
+            function (RequestInterface $request) use (&$retryExecuted) {
+                $retryExecuted = true;
+                return new Response(200);
+            }
+        ];
+
+        $this->expectException(BadResponseException::class);
+        try {
+            $this->executeMockRequest($mockResponse, null, [
+                'body' => $nonSeekableStream,
+                'http_errors' => true
+            ]);
+        } finally {
+            $this->assertFalse($retryExecuted);
+        }
     }
 
     public function testMultipleCompressionCallbacks()
