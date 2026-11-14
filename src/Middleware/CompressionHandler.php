@@ -48,11 +48,6 @@ class CompressionHandler
      */
     private $nextHandler;
 
-    /**
-     * @var RequestInterface Initial request with uncompressed body
-     */
-    private RequestInterface $originalRequest;
-
     private const COMPRESSION_HANDLER_ENABLED_KEY = "com.microsoft.kiota.handler.compression.enable";
     /**
      * @param callable $nextHandler
@@ -84,15 +79,15 @@ class CompressionHandler
                 $compressionOption = $options[CompressionOption::class];
             }
 
-            $this->originalRequest = $request; // keep reference in case we have to retry with uncompressed body
+            $originalRequest = $request; // keep reference in closure scope in case we have to retry with uncompressed body
             if (!$this->isRetryAttempt($options)) {
                 $request = $this->compress($request, $compressionOption);
                 $options['curl'] = [\CURLOPT_ENCODING => '']; // Allow curl to add the Accept-Encoding header with all the de-compression methods it supports
             }
             $fn = $this->nextHandler;
             return $fn($request, $options)->then(
-                $this->onFulfilled($options, $span),
-                $this->onRejected($options, $span)
+                $this->onFulfilled($originalRequest, $options, $span),
+                $this->onRejected($originalRequest, $options, $span)
             );
         } finally {
             $scope->detach();
@@ -116,13 +111,14 @@ class CompressionHandler
     /**
      * Retries the request if 415 response was received
      *
+     * @param RequestInterface $originalRequest
      * @param array<string, mixed> $options
      * @param SpanInterface $parentSpan
      * @return callable
      */
-    private function onFulfilled(array $options, SpanInterface $parentSpan): callable
+    private function onFulfilled(RequestInterface $originalRequest, array $options, SpanInterface $parentSpan): callable
     {
-        return function (ResponseInterface $response) use ($options, $parentSpan) {
+        return function (ResponseInterface $response) use ($originalRequest, $options, $parentSpan) {
             $span = $this->tracer->spanBuilder('compressionHandlerOnFulfilled')
                 ->setParent(Context::getCurrent())
                 ->addLink($parentSpan->getContext())
@@ -131,7 +127,7 @@ class CompressionHandler
                 if ($response->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
                     $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
                     $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, 1);
-                    return $this($this->originalRequest, $options);
+                    return $this($originalRequest, $options);
                 }
                 $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, ['retries' => $options[self::COMPRESSION_RETRY_ATTEMPT] ?? 1]);
                 return $response;
@@ -144,13 +140,14 @@ class CompressionHandler
     /**
      * Retry only if guzzle BadResponseException was thrown with a 415 status code
      *
+     * @param RequestInterface $originalRequest
      * @param array<string, mixed> $options
      * @param SpanInterface $parentSpan
      * @return callable
      */
-    private function onRejected(array $options, SpanInterface $parentSpan): callable
+    private function onRejected(RequestInterface $originalRequest, array $options, SpanInterface $parentSpan): callable
     {
-        return function ($reason) use ($options, $parentSpan) {
+        return function ($reason) use ($originalRequest, $options, $parentSpan) {
             $span = $this->tracer->spanBuilder('compressionHandlerOnRejected')
                 ->setParent(Context::getCurrent())
                 ->addLink($parentSpan->getContext())
@@ -161,7 +158,7 @@ class CompressionHandler
                     $span->recordException($reason);
                     if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
                         $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
-                        return $this($this->originalRequest, $options);
+                        return $this($originalRequest, $options);
                     }
                 }
                 return Create::rejectionFor($reason);
