@@ -125,9 +125,12 @@ class CompressionHandler
                 ->startSpan();
             try {
                 if ($response->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                    $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
-                    $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, 1);
-                    return $this($originalRequest, $options);
+                    if ($originalRequest->getBody()->isSeekable()) {
+                        $originalRequest->getBody()->rewind();
+                        $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
+                        $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, 1);
+                        return $this($originalRequest, $options);
+                    }
                 }
                 $span->setAttribute(self::COMPRESSION_RETRY_ATTEMPTS_KEY, ['retries' => $options[self::COMPRESSION_RETRY_ATTEMPT] ?? 1]);
                 return $response;
@@ -157,8 +160,11 @@ class CompressionHandler
                 if (is_a($reason, BadResponseException::class)) {
                     $span->recordException($reason);
                     if ($reason->getResponse()->getStatusCode() == 415 && !array_key_exists(self::COMPRESSION_RETRY_ATTEMPT, $options)) {
-                        $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
-                        return $this($originalRequest, $options);
+                        if ($originalRequest->getBody()->isSeekable()) {
+                            $originalRequest->getBody()->rewind();
+                            $options[self::COMPRESSION_RETRY_ATTEMPT] = 1;
+                            return $this($originalRequest, $options);
+                        }
                     }
                 }
                 return Create::rejectionFor($reason);
