@@ -61,6 +61,37 @@ class CompressionHandlerTest extends TestCase
         $this->assertEquals(200, $response->getStatusCode());
     }
 
+    public function testUncompressedBodyPreservedOn415Retry(): void
+    {
+        $payload = "CRITICAL_PAYLOAD_TO_PRESERVE";
+        $receivedBodies = [];
+        $receivedEncodings = [];
+
+        $mockResponse = [
+            function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
+                $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
+                $receivedBodies[] = $request->getBody()->getContents();
+                return new Response(415);
+            },
+            function (RequestInterface $request) use (&$receivedBodies, &$receivedEncodings) {
+                $receivedEncodings[] = $request->getHeaderLine('Content-Encoding');
+                $receivedBodies[] = $request->getBody()->getContents();
+                return new Response(200);
+            }
+        ];
+
+        $response = $this->executeMockRequest($mockResponse, null, ['body' => $payload]);
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertCount(2, $receivedBodies);
+
+        // Initial request was compressed with gzip
+        $this->assertEquals('gzip', $receivedEncodings[0]);
+
+        // Retry request must have uncompressed body preserved (not empty) and no Content-Encoding header
+        $this->assertEmpty($receivedEncodings[1]);
+        $this->assertEquals($payload, $receivedBodies[1]);
+    }
+
     public function testBadResponseExceptionCausesAtMostOneRetry()
     {
         $mockResponse = [
