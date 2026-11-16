@@ -2,7 +2,6 @@
 
 ![Build Status](https://github.com/microsoft/kiota-http-guzzle-php/actions/workflows/pr-validation.yml/badge.svg)
 [![Latest Stable Version](https://poser.pugx.org/microsoft/kiota-http-guzzle/version)](https://packagist.org/packages/microsoft/kiota-http-guzzle)
-[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=microsoft_kiota-http-guzzle-php&metric=coverage)](https://sonarcloud.io/dashboard?id=microsoft_kiota-http-guzzle-php)
 
 The Kiota HTTP Library for PHP is the PHP HTTP library implementation with [Guzzle](http://guzzlephp.org/).
 
