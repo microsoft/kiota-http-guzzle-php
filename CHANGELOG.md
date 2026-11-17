@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.2.3...microsoft-kiota-http-guzzle-v2.3.0) (2026-11-16)
+
+
+### Features
+
+* **http-guzzle:** add option to retry only unprocessed mutations ([aa69e4b](https://github.com/microsoft/kiota-php/commit/aa69e4b03c8d5703cfc3c044f86045383961a820))
+* **http-guzzle:** add option to retry only unprocessed mutations ([781bc8f](https://github.com/microsoft/kiota-php/commit/781bc8f42674b7cc38225c0fa17ba08162a782aa))
+
+
+### Bug Fixes
+
+* **http-guzzle,abstractions:** improve request adapter lifecycle, telemetry, and headers parity ([#136](https://github.com/microsoft/kiota-php/issues/136)) ([29523eb](https://github.com/microsoft/kiota-php/commit/29523eb1a6a2c2085f6635f61a4917c167c20b6e))
+* **http-guzzle:** capture request in closure scope to prevent concurrency leak in CompressionHandler ([93e0dde](https://github.com/microsoft/kiota-php/commit/93e0ddee2b82b3437222f6f71a7265d4cebda74f))
+* **http-guzzle:** prevent concurrency leak and body payload loss on 415 retry in CompressionHandler ([#141](https://github.com/microsoft/kiota-php/issues/141)) ([238accb](https://github.com/microsoft/kiota-php/commit/238accb8e730c13698c75925ea5ba760ac138baf))
+* **http-guzzle:** rewind seekable request body before uncompressed retry in CompressionHandler ([5b9d6f9](https://github.com/microsoft/kiota-php/commit/5b9d6f9bad991725be536451cd77314d31d8db62))
+
 ## [2.2.3](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.2.2...microsoft-kiota-http-guzzle-v2.2.3) (2026-11-03)
 
 
