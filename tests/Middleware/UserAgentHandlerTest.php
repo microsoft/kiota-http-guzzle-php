@@ -115,4 +115,91 @@ class UserAgentHandlerTest extends TestCase
         $this->assertStringContainsString('DefaultProduct/1.0.0', $capturedHeaders[1]);
         $this->assertStringNotContainsString('CustomProduct/2.0.0', $capturedHeaders[1]);
     }
+
+    public function testUserAgentNotDuplicatedWhenAlreadyPresent(): void
+    {
+        $option = new UserAgentHandlerOption();
+        $option->setProductName('kiota-php');
+        $option->setProductVersion('2.2.3');
+
+        $capturedHeader = '';
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$capturedHeader) {
+                $capturedHeader = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::userAgent($option));
+        $client = new Client(['handler' => $handlerStack]);
+
+        $client->get('/', [
+            'headers' => ['User-Agent' => 'MyApp/1.0 kiota-php/2.2.3']
+        ]);
+
+        $this->assertEquals('MyApp/1.0 kiota-php/2.2.3', $capturedHeader);
+    }
+
+    public function testUserAgentAppendedWhenExistingHeaderContainsPrefixOrVersionSubstring(): void
+    {
+        $option = new UserAgentHandlerOption();
+        $option->setProductName('kiota-php');
+        $option->setProductVersion('2.2.3');
+
+        $capturedHeaders = [];
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            },
+            function (RequestInterface $request) use (&$capturedHeaders) {
+                $capturedHeaders[] = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::userAgent($option));
+        $client = new Client(['handler' => $handlerStack]);
+
+        // Case 1: existing token is a version superset, e.g. kiota-php/2.2.30
+        $client->get('/', [
+            'headers' => ['User-Agent' => 'kiota-php/2.2.30']
+        ]);
+
+        // Case 2: existing token has a prefix, e.g. custom-kiota-php/2.2.3
+        $client->get('/', [
+            'headers' => ['User-Agent' => 'custom-kiota-php/2.2.3']
+        ]);
+
+        $this->assertCount(2, $capturedHeaders);
+        $this->assertEquals('kiota-php/2.2.30 kiota-php/2.2.3', $capturedHeaders[0]);
+        $this->assertEquals('custom-kiota-php/2.2.3 kiota-php/2.2.3', $capturedHeaders[1]);
+    }
+
+    public function testUserAgentDeduplicationHandlesWhitespaceVariations(): void
+    {
+        $option = new UserAgentHandlerOption();
+        $option->setProductName('kiota-php');
+        $option->setProductVersion('2.2.3');
+
+        $capturedHeader = '';
+        $mockHandler = new MockHandler([
+            function (RequestInterface $request) use (&$capturedHeader) {
+                $capturedHeader = $request->getHeaderLine('User-Agent');
+                return new Response(200);
+            }
+        ]);
+
+        $handlerStack = new HandlerStack($mockHandler);
+        $handlerStack->push(KiotaMiddleware::userAgent($option));
+        $client = new Client(['handler' => $handlerStack]);
+
+        $client->get('/', [
+            'headers' => ['User-Agent' => "MyApp/1.0   kiota-php/2.2.3\tOther/2.0"]
+        ]);
+
+        $this->assertEquals("MyApp/1.0   kiota-php/2.2.3\tOther/2.0", $capturedHeader);
+    }
 }

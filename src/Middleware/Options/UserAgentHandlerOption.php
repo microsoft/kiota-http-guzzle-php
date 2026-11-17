@@ -112,10 +112,16 @@ class UserAgentHandlerOption implements RequestOption
     {
         return function (RequestInterface $request) {
             $currentUserAgentHeaderValue = $request->getHeaderLine(UserAgentHandler::USER_AGENT_HEADER_NAME);
-            if ($currentUserAgentHeaderValue) {
-                $currentUserAgentHeaderValue .= " ";
+            $kiotaUserAgent = $this->getUserAgentHeaderValue();
+            if (!empty($currentUserAgentHeaderValue)) {
+                $existingTokens = preg_split('/\s+/', trim($currentUserAgentHeaderValue));
+                if (is_array($existingTokens) && in_array($kiotaUserAgent, $existingTokens, true)) {
+                    return $request;
+                }
+                $currentUserAgentHeaderValue .= " " . $kiotaUserAgent;
+            } else {
+                $currentUserAgentHeaderValue = $kiotaUserAgent;
             }
-            $currentUserAgentHeaderValue .= $this->getUserAgentHeaderValue();
             return $request->withHeader(UserAgentHandler::USER_AGENT_HEADER_NAME, $currentUserAgentHeaderValue);
         };
     }

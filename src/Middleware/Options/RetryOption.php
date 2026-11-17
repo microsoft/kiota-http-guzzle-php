@@ -52,6 +52,18 @@ class RetryOption implements RequestOption
      * The callback should accept a delay time in seconds, number of retry attempts and a {@link ResponseInterface} and return a bool
      */
     private $shouldRetry;
+    /**
+     * @var bool
+     * Whether POST and PATCH requests are retried only after a response showing the server didn't process them.
+     * POST and PATCH aren't idempotent, so resending one the server already processed can repeat its side effect, such as sending an email twice.
+     * A 504 can arrive after the server processed the request.
+     * When this is true, POST and PATCH requests are retried only after a 429 or 503 response, and a 504 is returned to the caller.
+     * This relies on the common service convention, followed by Microsoft Graph, that a 429 or 503 response means the server didn't process the request.
+     * HTTP doesn't guarantee this, so a service that returns 429 or 503 after acting on a request can still see it repeated.
+     * PUT and DELETE also change state, but they're idempotent, so they aren't affected, and neither are other methods.
+     * Defaults to false.
+     */
+    private bool $retryUnprocessedMutationsOnly = false;
 
     /**
      * Initialise RetryOption
@@ -60,10 +72,12 @@ class RetryOption implements RequestOption
      * @param int $delaySeconds
      * @param \DateInterval|null $retriesTimeLimit
      * @param callable|null $shouldRetry If null, defaults to callable that returns true
+     * @param bool $retryUnprocessedMutationsOnly See {@link setRetryUnprocessedMutationsOnly()}
      *
      */
-    public function __construct(int $maxRetries = 3, int $delaySeconds = 3, ?\DateInterval $retriesTimeLimit = null, ?callable $shouldRetry = null)
+    public function __construct(int $maxRetries = 3, int $delaySeconds = 3, ?\DateInterval $retriesTimeLimit = null, ?callable $shouldRetry = null, bool $retryUnprocessedMutationsOnly = false)
     {
+        $this->setRetryUnprocessedMutationsOnly($retryUnprocessedMutationsOnly);
         $this->setMaxRetries($maxRetries);
         $this->setDelay($delaySeconds);
         $this->setRetriesTimeLimit($retriesTimeLimit);
@@ -161,5 +175,32 @@ class RetryOption implements RequestOption
     public function getShouldRetry(): callable
     {
         return $this->shouldRetry;
+    }
+
+    /**
+     * Whether POST and PATCH requests are retried only after a response showing the server didn't process them.
+     * POST and PATCH aren't idempotent, so resending one the server already processed can repeat its side effect, such as sending an email twice.
+     * A 504 can arrive after the server processed the request.
+     * When this is true, POST and PATCH requests are retried only after a 429 or 503 response, and a 504 is returned to the caller.
+     * This relies on the common service convention, followed by Microsoft Graph, that a 429 or 503 response means the server didn't process the request.
+     * HTTP doesn't guarantee this, so a service that returns 429 or 503 after acting on a request can still see it repeated.
+     * PUT and DELETE also change state, but they're idempotent, so they aren't affected, and neither are other methods.
+     * Defaults to false.
+     *
+     * @param bool $retryUnprocessedMutationsOnly
+     * @return RetryOption
+     */
+    public function setRetryUnprocessedMutationsOnly(bool $retryUnprocessedMutationsOnly): self
+    {
+        $this->retryUnprocessedMutationsOnly = $retryUnprocessedMutationsOnly;
+        return $this;
+    }
+
+    /**
+     * @return bool
+     */
+    public function getRetryUnprocessedMutationsOnly(): bool
+    {
+        return $this->retryUnprocessedMutationsOnly;
     }
 }
