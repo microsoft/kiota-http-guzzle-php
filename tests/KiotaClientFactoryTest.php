@@ -6,11 +6,14 @@ use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use Microsoft\Kiota\Http\Constants;
 use Microsoft\Kiota\Http\KiotaClientFactory;
 use Microsoft\Kiota\Http\Middleware\Options\RetryOption;
 use Microsoft\Kiota\Http\Middleware\Options\UrlReplaceOption;
+use Microsoft\Kiota\Http\Middleware\Options\UserAgentHandlerOption;
+use Microsoft\Kiota\Http\Middleware\UrlReplaceHandler;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 
@@ -60,6 +63,40 @@ class KiotaClientFactoryTest extends TestCase
         $response2 = $client->get($uri);
         $this->assertSame(200, $response2->getStatusCode());
         $this->assertCount(0, $mockHandler);
+    }
+
+    public function testDefaultStackPreparesOnlyTheInitialRequest(): void
+    {
+        $uri = 'https://graph.microsoft.com/users?%24top=5';
+        $redirectUri = 'https://graph.microsoft.com/users?%24top=10';
+        $mockHandler = new MockHandler([
+            new Response(302, ['Location' => $redirectUri]),
+            new Response(200),
+        ]);
+        $afterUrlReplacement = [];
+        $atTransport = [];
+        $middlewareStack = KiotaClientFactory::getDefaultHandlerStack();
+        $middlewareStack->setHandler($mockHandler);
+        $middlewareStack->after(UrlReplaceHandler::HANDLER_NAME, Middleware::history($afterUrlReplacement));
+        $middlewareStack->push(Middleware::history($atTransport));
+        $client = KiotaClientFactory::createWithMiddleware($middlewareStack);
+
+        $response = $client->get($uri, [
+            UrlReplaceOption::class => new UrlReplaceOption(true, ['/users' => '/me']),
+            UserAgentHandlerOption::class => new UserAgentHandlerOption(
+                static fn(RequestInterface $request): RequestInterface =>
+                    $request->withAddedHeader('User-Agent', 'test-client/1')
+            ),
+        ]);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertCount(1, $afterUrlReplacement);
+        $this->assertSame('https://graph.microsoft.com/me?%24top=5', (string) $afterUrlReplacement[0]['request']->getUri());
+        $this->assertCount(2, $atTransport);
+        $this->assertSame('https://graph.microsoft.com/me?$top=5', (string) $atTransport[0]['request']->getUri());
+        $this->assertSame($redirectUri, (string) $atTransport[1]['request']->getUri());
+        $this->assertSame($atTransport[0]['request']->getHeader('User-Agent'), $atTransport[1]['request']->getHeader('User-Agent'));
+        $this->assertContains('test-client/1', $atTransport[1]['request']->getHeader('User-Agent'));
     }
 
     /**

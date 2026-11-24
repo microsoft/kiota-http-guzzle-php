@@ -23,6 +23,18 @@ run `composer require microsoft/kiota-http-guzzle` or add the following to your 
 }
 ```
 
+### HTTP middleware order
+
+The default Guzzle stack runs URL replacement, query parameter name decoding, User-Agent configuration,
+Guzzle redirects, retries, and header inspection in that order. The first three prepare the initial
+request only; a server-provided redirect target goes straight to the per-hop retry and inspection handlers.
+
+Generated clients authenticate in the request adapter, and Guzzle handles response decompression. For
+arbitrary requests, place any custom authentication middleware after User-Agent. Request compression
+remains opt-in: insert `KiotaMiddleware::compression()` with
+`$stack->before('kiotaRedirectHandler', KiotaMiddleware::compression())` on the default stack, after any
+custom authentication middleware.
+
 ## Contributing
 
 This project welcomes contributions and suggestions.This project welcomes contributions and suggestions. Issues and pull requests should be made against the [kiota-php](https://github.com/microsoft/kiota-php/) repository.
