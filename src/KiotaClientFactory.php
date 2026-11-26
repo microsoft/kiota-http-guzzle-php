@@ -72,10 +72,10 @@ class KiotaClientFactory
     public static function getDefaultHandlerStack(): HandlerStack
     {
         $handlerStack = new HandlerStack(Utils::chooseHandler());
-        $handlerStack->push(KiotaMiddleware::parameterNamesDecoding(), ParametersNameDecodingHandler::HANDLER_NAME);
         $handlerStack->push(KiotaMiddleware::urlReplace(), UrlReplaceHandler::HANDLER_NAME);
-        $handlerStack->push(GuzzleMiddleware::redirect(), 'kiotaRedirectHandler');
+        $handlerStack->push(KiotaMiddleware::parameterNamesDecoding(), ParametersNameDecodingHandler::HANDLER_NAME);
         $handlerStack->push(KiotaMiddleware::userAgent(), UserAgentHandler::HANDLER_NAME);
+        $handlerStack->push(GuzzleMiddleware::redirect(), 'kiotaRedirectHandler');
         $handlerStack->push(KiotaMiddleware::retry(), RetryHandler::HANDLER_NAME);
         $handlerStack->push(KiotaMiddleware::headersInspection(), HeadersInspectionHandler::HANDLER_NAME);
         return $handlerStack;
