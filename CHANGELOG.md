@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.3.0...microsoft-kiota-http-guzzle-v2.3.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **http-guzzle:** align default middleware order ([b443cc5](https://github.com/microsoft/kiota-php/commit/b443cc5e06c894000e5134fdb980d49552e7d9ae))
+* **http-guzzle:** align default middleware order ([86ccc52](https://github.com/microsoft/kiota-php/commit/86ccc5240a5ea0d1998079cce6af0f03022e9bb4))
+
 ## [2.3.0](https://github.com/microsoft/kiota-php/compare/microsoft-kiota-http-guzzle-v2.2.3...microsoft-kiota-http-guzzle-v2.3.0) (2026-11-16)
 
 
